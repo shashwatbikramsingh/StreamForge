@@ -1,0 +1,12 @@
+{
+  "name": "streamforge",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "setup": "npm --prefix landing install",
+    "dev": "npm --prefix landing run dev",
+    "build": "npm --prefix landing run build",
+    "preview": "npm --prefix landing run preview"
+  }
+}
+
