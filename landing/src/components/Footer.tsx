@@ -45,7 +45,7 @@ export const Footer: React.FC = () => {
         {/* Right: Social Icons */}
         <div className="flex items-center gap-4 text-neutral-500">
           <a
-            href="https://github.com"
+            href="https://github.com/shashwatbikramsingh/StreamForge"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-neutral-900 transition-colors p-1"

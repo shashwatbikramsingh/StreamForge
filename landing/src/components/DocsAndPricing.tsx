@@ -5,7 +5,7 @@ import { GithubIcon } from './SocialIcons'
 
 export const DocsAndPricing: React.FC = () => {
   const docCards = [
-    { title: 'GitHub', sub: 'Source Code', icon: GithubIcon, href: 'https://github.com' },
+    { title: 'GitHub', sub: 'Source Code', icon: GithubIcon, href: 'https://github.com/shashwatbikramsingh/StreamForge' },
     { title: 'API Docs', sub: 'Endpoints & Usage', icon: FileCode, href: '#api' },
     { title: 'Setup Guide', sub: 'Install & Run', icon: BookOpen, href: '#setup' },
     { title: 'Architecture', sub: 'Design & Decisions', icon: Layers, href: '#architecture' },
@@ -48,7 +48,7 @@ export const DocsAndPricing: React.FC = () => {
   ]
 
   return (
-    <section id="pricing" className="w-full px-4 sm:px-6 lg:px-8 py-1 md:py-1.5">
+    <section id="docs" className="w-full px-4 sm:px-6 lg:px-8 py-1 md:py-1.5 scroll-mt-6">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         
         {/* Left Card: Documentation (5 cols) */}
@@ -100,11 +100,12 @@ export const DocsAndPricing: React.FC = () => {
 
         {/* Right Card: Pricing (7 cols) */}
         <motion.div
+          id="pricing"
           initial={{ opacity: 0, y: 15 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-7 border border-neutral-100 shadow-[0_8px_30px_rgba(234,88,12,0.04)] flex flex-col justify-between"
+          className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-7 border border-neutral-100 shadow-[0_8px_30px_rgba(234,88,12,0.04)] flex flex-col justify-between scroll-mt-6"
         >
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFF3EA] border border-[#FED7AA]/70 text-[#9A3412] text-xs font-semibold mb-3">

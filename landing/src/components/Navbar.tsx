@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, Menu, X } from 'lucide-react'
+import { GithubIcon } from './SocialIcons'
 
 interface NavbarProps {
   onGetStartedClick: () => void
@@ -64,8 +65,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick }) => {
           ))}
         </div>
 
-        {/* Right Buttons: Login & Get Started → */}
+        {/* Right Buttons: GitHub, Login & Get Started → */}
         <div className="hidden md:flex items-center gap-2.5">
+          <a
+            href="https://github.com/shashwatbikramsingh/StreamForge"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-neutral-600 hover:text-neutral-900 transition-colors rounded-full hover:bg-neutral-100/70"
+            aria-label="View on GitHub"
+            title="View GitHub Repository"
+          >
+            <GithubIcon className="w-4 h-4" />
+          </a>
           <button
             onClick={onGetStartedClick}
             className="px-5 py-2 text-xs sm:text-sm font-medium text-neutral-800 bg-white/70 hover:bg-white border border-neutral-300/80 rounded-full transition-all shadow-2xs hover:shadow-xs"

@@ -3,6 +3,13 @@
 > **Turn Streaming Events Into Actionable Intelligence.**  
 > An end-to-end, fault-tolerant real-time event streaming and operational analytics platform.
 
+[![StreamForge CI](https://github.com/shashwatbikramsingh/StreamForge/actions/workflows/ci.yml/badge.svg)](https://github.com/shashwatbikramsingh/StreamForge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](https://opensource.org/licenses/MIT)
+[![React](https://img.shields.io/badge/React-19-blue.svg)](https://react.dev)
+[![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-v4-38B2AC.svg)](https://tailwindcss.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688.svg)](https://fastapi.tiangolo.com)
+[![Kafka](https://img.shields.io/badge/Kafka-KRaft-black.svg)](https://kafka.apache.org)
+
 ![StreamForge](https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&h=400&q=80)
 
 ---
@@ -27,9 +34,9 @@
 | **Event Generator** | Python (3.11+) | Synthesizes realistic event streams with UUIDv4 envelopes |
 | **Message Broker** | Apache Kafka (KRaft) | Scalable, ordered, partition-keyed message ingestion |
 | **Stream Processing** | Apache Spark (PySpark) | Windowed aggregations, deduplication, and anomaly checks |
-| **Storage & Persistence** | PostgreSQL | Relational storage for analytics tables and DLQ payloads |
+| **Storage & Persistence** | PostgreSQL 16 | Relational storage for analytics tables and DLQ payloads |
 | **API Layer** | FastAPI | High-performance asynchronous REST telemetry layer |
-| **Frontend UI** | React 19, Vite, Tailwind CSS v4 | High-fidelity interactive landing page and live dashboard |
+| **Frontend UI** | React 19, Vite, Tailwind CSS v4 | 100% fluid edge-to-edge interactive landing page & live dashboard |
 | **Animations** | Framer Motion | Smooth springs, waveform pulses, and telemetry transitions |
 | **Containerization** | Docker & Docker Compose | Multi-container reproducible orchestration |
 
@@ -67,31 +74,41 @@ flowchart LR
 
 ## 🚀 Getting Started
 
-### Prerequisites
-- **Node.js**: v18+ (v20+ recommended)
-- **npm** or **pnpm** / **yarn**
+### Option 1: Full-Stack Docker Compose (Recommended)
 
-### Quick Start (Frontend Landing & Dashboard)
+Run Kafka, PostgreSQL (with initialized schema), FastAPI, and the Web UI in containers:
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/shashwatbikramsingh/StreamForge.git
-   cd StreamForge
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/shashwatbikramsingh/StreamForge.git
+cd StreamForge
 
-2. **Install dependencies:**
+# Start all services
+docker compose up -d
+```
+
+- **Landing & Dashboard UI:** [http://localhost:4173](http://localhost:4173)
+- **FastAPI Telemetry Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Kafka Broker:** `localhost:9092`
+- **PostgreSQL Database:** `localhost:5432` (`streamforge`)
+
+---
+
+### Option 2: Local Frontend Development
+
+1. **Install dependencies:**
    ```bash
    npm run setup
    # or: cd landing && npm install
    ```
 
-3. **Start local development server:**
+2. **Start local Vite development server:**
    ```bash
    npm run dev
    ```
    Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-4. **Production Build & Preview:**
+3. **Production Build & Preview:**
    ```bash
    npm run build
    npm run preview
@@ -99,11 +116,34 @@ flowchart LR
 
 ---
 
+### Option 3: Local FastAPI Backend
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+Open interactive Swagger API documentation at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+---
+
 ## 📂 Project Structure
 
 ```
 StreamForge/
-├── landing/                    # React + Vite + Tailwind v4 web app
+├── .github/workflows/          # CI/CD automated build & GitHub Pages deploy
+│   ├── ci.yml
+│   └── deploy-pages.yml
+├── backend/                    # FastAPI telemetry & query service
+│   ├── app/
+│   │   └── main.py             # Health checks, metrics & live event endpoints
+│   ├── Dockerfile
+│   └── requirements.txt
+├── docker/                     # Infrastructure configuration
+│   └── init-db.sql             # PostgreSQL schema (processed_events, rides, dlq)
+├── landing/                    # React 19 + Vite + Tailwind v4 web app
 │   ├── src/
 │   │   ├── components/         # Modular landing page sections & modals
 │   │   │   ├── Navbar.tsx
@@ -123,13 +163,20 @@ StreamForge/
 │   │   │   └── BackgroundGradients.tsx
 │   │   ├── App.tsx             # Main layout assembly
 │   │   └── main.tsx
+│   ├── Dockerfile
 │   ├── package.json
 │   └── vite.config.ts
 ├── streamforge_docs/           # Architecture and design specifications
+│   ├── api.md
+│   ├── architecture.md
+│   ├── database.md
 │   ├── design.md
+│   ├── frontend.md
+│   ├── PRD.md
 │   └── RULES.md
-├── PRODUCT.md                  # Product requirement document
-├── DESIGN.md                   # Visual system specification
+├── docker-compose.yml          # Multi-container orchestration (Kafka, Postgres, API, Web)
+├── .env.example                # Environment variables template
+├── LICENSE                     # MIT License
 ├── package.json                # Root proxy scripts
 └── README.md
 ```
@@ -137,4 +184,4 @@ StreamForge/
 ---
 
 ## 📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

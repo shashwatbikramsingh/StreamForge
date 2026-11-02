@@ -49,7 +49,7 @@ export const CtaBanner: React.FC<CtaBannerProps> = ({ onGetStarted }) => {
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
           <a
-            href="https://github.com"
+            href="https://github.com/shashwatbikramsingh/StreamForge"
             target="_blank"
             rel="noopener noreferrer"
             className="px-5 py-2.5 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold text-xs sm:text-sm border border-neutral-700 flex items-center gap-2 transition-all hover:border-neutral-500"
