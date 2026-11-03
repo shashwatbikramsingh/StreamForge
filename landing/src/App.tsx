@@ -20,7 +20,7 @@ export function App() {
   const [exploreModalOpen, setExploreModalOpen] = useState(false)
 
   return (
-    <div className="relative min-h-screen text-[#111827] overflow-x-hidden selection:bg-[#EA580C]/20 selection:text-[#EA580C] w-full">
+    <div className="relative min-h-screen bg-[#08080A] text-[#F5F3EF] overflow-x-hidden selection:bg-[#E7D7BE] selection:text-[#08080A] w-full">
       {/* Background Organic Ambient Warm Blobs */}
       <BackgroundGradients />
 

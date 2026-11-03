@@ -18,7 +18,7 @@ export const ProblemSolution: React.FC = () => {
   ]
 
   return (
-    <section className="w-full px-4 sm:px-6 lg:px-8 py-1 md:py-1.5">
+    <section className="w-full px-4 sm:px-6 lg:px-8 py-2 md:py-3">
       <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
         
         {/* Left Card: The Problem */}
@@ -27,19 +27,19 @@ export const ProblemSolution: React.FC = () => {
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="lg:col-span-6 bg-white rounded-3xl p-6 sm:p-8 border border-neutral-100 shadow-[0_10px_30px_-8px_rgba(0,0,0,0.03)] flex flex-col justify-between h-full"
+          className="lg:col-span-6 bg-[#0E0E12]/90 rounded-3xl p-6 sm:p-8 border border-white/[0.08] shadow-xl flex flex-col justify-between h-full"
         >
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFF3EA] border border-[#FED7AA]/70 text-[#9A3412] text-xs font-semibold mb-3.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#EA580C]" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[10px] font-bold tracking-wider uppercase mb-3.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
               The Problem
             </div>
 
-            <h3 className="text-xl sm:text-2xl font-extrabold text-[#111827] tracking-tight mb-2">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-[#F5F3EF] tracking-tight mb-2">
               Real-time data is complex and challenging.
             </h3>
 
-            <p className="text-xs sm:text-[13px] text-neutral-500 leading-relaxed font-normal mb-6">
+            <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed font-normal mb-6">
               Modern applications generate massive, continuous event streams. Processing them reliably, at scale, is not easy.
             </p>
           </div>
@@ -48,19 +48,19 @@ export const ProblemSolution: React.FC = () => {
             {problems.map((prob, i) => (
               <div 
                 key={i}
-                className="flex items-center gap-3 p-2.5 rounded-xl bg-neutral-50/70 border border-neutral-100 hover:border-rose-200 transition-colors"
+                className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-rose-500/30 transition-colors"
               >
-                <div className="w-6 h-6 rounded-lg bg-rose-50 border border-rose-100 text-rose-500 flex items-center justify-center shrink-0">
+                <div className="w-6 h-6 rounded-lg bg-rose-500/15 border border-rose-500/25 text-rose-400 flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-3.5 h-3.5" />
                 </div>
-                <span className="text-xs font-medium text-neutral-700">{prob}</span>
+                <span className="text-xs font-medium text-[#D4CEBF]">{prob}</span>
               </div>
             ))}
           </div>
         </motion.div>
 
         {/* Floating Center Transition Arrow */}
-        <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white shadow-md border border-neutral-200/80 items-center justify-center text-neutral-600">
+        <div className="hidden lg:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-[#14141A] shadow-xl border border-white/15 items-center justify-center text-[#E7D7BE]">
           <ArrowRight className="w-4 h-4" />
         </div>
 
@@ -70,19 +70,19 @@ export const ProblemSolution: React.FC = () => {
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="lg:col-span-6 bg-white rounded-3xl p-6 sm:p-8 border border-neutral-100 shadow-[0_10px_30px_-8px_rgba(234,88,12,0.05)] flex flex-col justify-between h-full"
+          className="lg:col-span-6 bg-[#0E0E12]/90 rounded-3xl p-6 sm:p-8 border border-[#E7D7BE]/20 shadow-[0_12px_40px_rgba(231,215,190,0.03)] flex flex-col justify-between h-full"
         >
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFF3EA] border border-[#FED7AA]/70 text-[#9A3412] text-xs font-semibold mb-3.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#EA580C]" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#E7D7BE]/10 border border-[#E7D7BE]/25 text-[#E7D7BE] text-[10px] font-bold tracking-wider uppercase mb-3.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />
               Our Solution
             </div>
 
-            <h3 className="text-xl sm:text-2xl font-extrabold text-[#111827] tracking-tight mb-2">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-[#F5F3EF] tracking-tight mb-2">
               StreamForge makes streaming data simple.
             </h3>
 
-            <p className="text-xs sm:text-[13px] text-neutral-500 leading-relaxed font-normal mb-6">
+            <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed font-normal mb-6">
               A robust end-to-end platform to ingest, process, validate, store, and analyze real-time events with reliability and scale.
             </p>
           </div>
@@ -91,12 +91,12 @@ export const ProblemSolution: React.FC = () => {
             {solutions.map((sol, i) => (
               <div 
                 key={i}
-                className="flex items-center gap-3 p-2.5 rounded-xl bg-neutral-50/70 border border-neutral-100 hover:border-emerald-200 transition-colors"
+                className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] hover:border-[#E7D7BE]/40 transition-colors"
               >
-                <div className="w-6 h-6 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                <div className="w-6 h-6 rounded-lg bg-[#E7D7BE]/15 border border-[#E7D7BE]/25 text-[#E7D7BE] flex items-center justify-center shrink-0">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                 </div>
-                <span className="text-xs font-medium text-neutral-700">{sol}</span>
+                <span className="text-xs font-medium text-[#E4DFD5]">{sol}</span>
               </div>
             ))}
           </div>
@@ -106,4 +106,3 @@ export const ProblemSolution: React.FC = () => {
     </section>
   )
 }
-

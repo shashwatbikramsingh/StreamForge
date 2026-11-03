@@ -8,144 +8,143 @@ interface NavbarProps {
   onExploreClick: () => void
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClick }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const navLinks = [
-    { label: 'Home', href: '#' },
-    { label: 'Product', href: '#product' },
-    { label: 'Features', href: '#features' },
-    { label: 'Architecture', href: '#architecture' },
-    { label: 'Use Cases', href: '#use-cases' },
-    { label: 'Docs', href: '#docs' },
-    { label: 'Pricing', href: '#pricing' },
+    { label: 'PLATFORM', href: '#product' },
+    { label: 'FEATURES', href: '#features' },
+    { label: 'ARCHITECTURE', href: '#architecture' },
+    { label: 'USE CASES', href: '#use-cases' },
+    { label: 'DOCS', href: '#docs' },
+    { label: 'PRICING', href: '#pricing' },
   ]
 
   return (
-    <header className="relative z-40 w-full px-4 sm:px-6 lg:px-8 py-2.5 md:py-3">
+    <header className="sticky top-0 z-50 w-full px-4 sm:px-6 lg:px-8 py-3.5 bg-[#08080A]/80 backdrop-blur-xl border-b border-white/[0.06] transition-all">
       <nav className="flex items-center justify-between">
-        {/* Logo: 5 vertical rounded bars + StreamForge */}
-        <a href="#" className="flex items-center gap-2.5 group">
-          <div className="flex items-end gap-[3px] h-6 px-0.5">
-            {[12, 22, 15, 26, 17].map((height, i) => (
-              <motion.span
-                key={i}
-                className="w-[3px] rounded-full bg-[#EA580C]"
-                initial={{ height: `${height}px` }}
-                animate={{
-                  height: [
-                    `${height}px`,
-                    `${Math.max(8, (height * 1.25) % 27)}px`,
-                    `${height}px`,
-                  ],
-                }}
-                transition={{
-                  repeat: Infinity,
-                  duration: 2.2 + i * 0.3,
-                  ease: 'easeInOut',
-                }}
-              />
-            ))}
+        
+        {/* Left: Brand Logo matching the Dribbble shot's luxury concentric spiral mark */}
+        <a href="#" className="flex items-center gap-3 group">
+          <div className="relative w-7 h-7 flex items-center justify-center">
+            {/* Concentric rings */}
+            <span className="absolute inset-0 rounded-full border border-[#E7D7BE]/40 group-hover:border-[#E7D7BE] transition-colors" />
+            <span className="absolute inset-1 rounded-full border border-[#E7D7BE]/70 group-hover:scale-105 transition-transform" />
+            <motion.span 
+              className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]"
+              animate={{ scale: [1, 1.3, 1] }}
+              transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
+            />
           </div>
-          <span className="text-[20px] font-bold tracking-tight text-[#111827] group-hover:text-[#EA580C] transition-colors">
+          <span className="text-[17px] font-bold tracking-tight text-[#F5F3EF] group-hover:text-[#E7D7BE] transition-colors">
             StreamForge
           </span>
         </a>
 
-        {/* Desktop Nav Links */}
-        <div className="hidden md:flex items-center gap-7 lg:gap-9">
+        {/* Center: Desktop Nav Links (tracked, uppercase, elegant) */}
+        <div className="hidden md:flex items-center gap-6 lg:gap-8">
           {navLinks.map((link) => (
             <a
               key={link.label}
               href={link.href}
-              className="text-[14px] font-medium text-neutral-600 hover:text-[#111827] transition-colors"
+              className="text-[11.5px] font-semibold tracking-widest text-[#A39E93] hover:text-[#F5F3EF] transition-colors"
             >
               {link.label}
             </a>
           ))}
         </div>
 
-        {/* Right Buttons: GitHub, Login & Get Started → */}
-        <div className="hidden md:flex items-center gap-2.5">
+        {/* Right: Actions matching the Dribbble shot */}
+        <div className="hidden md:flex items-center gap-3">
           <a
             href="https://github.com/shashwatbikramsingh/StreamForge"
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-neutral-600 hover:text-neutral-900 transition-colors rounded-full hover:bg-neutral-100/70"
+            className="p-2 text-[#A39E93] hover:text-[#F5F3EF] transition-colors rounded-full hover:bg-white/5"
             aria-label="View on GitHub"
             title="View GitHub Repository"
           >
             <GithubIcon className="w-4 h-4" />
           </a>
+          
+          {/* Outline Button: VIEW DEMO */}
           <button
-            onClick={onGetStartedClick}
-            className="px-5 py-2 text-xs sm:text-sm font-medium text-neutral-800 bg-white/70 hover:bg-white border border-neutral-300/80 rounded-full transition-all shadow-2xs hover:shadow-xs"
+            onClick={onExploreClick}
+            className="px-5 py-2 text-[11px] font-bold tracking-wider text-[#E4DFD5] bg-white/[0.03] hover:bg-white/[0.08] border border-white/15 rounded-full transition-all uppercase shadow-2xs hover:border-white/30 active:scale-[0.98]"
           >
-            Login
+            VIEW DEMO
           </button>
+
+          {/* Champagne Solid Button: REQUEST A DIAGNOSTIC / GET STARTED */}
           <button
             onClick={onGetStartedClick}
-            className="px-5 py-2 text-xs sm:text-sm font-semibold text-white bg-[#18181B] hover:bg-neutral-800 rounded-full flex items-center gap-1.5 transition-all shadow-xs hover:scale-[1.02] active:scale-[0.98]"
+            className="px-5 py-2 text-[11px] font-bold tracking-wider text-[#08080A] bg-[#E7D7BE] hover:bg-[#F3E8D6] rounded-full flex items-center gap-1.5 transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98] uppercase"
           >
-            Get Started
+            GET STARTED
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Mobile Menu Button */}
-        <div className="flex md:hidden">
+        <div className="flex md:hidden items-center gap-2">
+          <a
+            href="https://github.com/shashwatbikramsingh/StreamForge"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-[#A39E93] hover:text-white"
+          >
+            <GithubIcon className="w-4 h-4" />
+          </a>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 text-neutral-700 hover:text-neutral-900 focus:outline-none"
+            className="p-2 text-[#A39E93] hover:text-[#F5F3EF] focus:outline-none"
             aria-label="Toggle Menu"
           >
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
+
       </nav>
 
-      {/* Mobile Drawer */}
+      {/* Mobile Menu Dropdown */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="md:hidden absolute top-full left-6 right-6 mt-2 bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-xl border border-neutral-200/80 z-50"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="md:hidden mt-3 pt-3 border-t border-white/10 flex flex-col gap-3 pb-2"
           >
-            <div className="flex flex-col gap-4">
-              {navLinks.map((link) => (
-                <a
-                  key={link.label}
-                  href={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="text-base font-medium text-neutral-800 hover:text-[#EA580C] transition-colors py-1"
-                >
-                  {link.label}
-                </a>
-              ))}
-              <div className="pt-4 border-t border-neutral-100 flex flex-col gap-2.5">
-                <button
-                  onClick={() => {
-                    setMobileMenuOpen(false)
-                    onGetStartedClick()
-                  }}
-                  className="w-full py-2.5 text-sm font-medium text-neutral-800 bg-neutral-100 rounded-full text-center"
-                >
-                  Login
-                </button>
-                <button
-                  onClick={() => {
-                    setMobileMenuOpen(false)
-                    onGetStartedClick()
-                  }}
-                  className="w-full py-2.5 text-sm font-semibold text-white bg-[#18181B] rounded-full flex items-center justify-center gap-2"
-                >
-                  Get Started
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
+            {navLinks.map((link) => (
+              <a
+                key={link.label}
+                href={link.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-xs font-semibold tracking-wider text-[#A39E93] hover:text-[#E7D7BE] py-1 transition-colors"
+              >
+                {link.label}
+              </a>
+            ))}
+            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  onExploreClick()
+                }}
+                className="w-full py-2.5 rounded-full border border-white/20 text-[#E4DFD5] text-xs font-bold tracking-wider uppercase"
+              >
+                VIEW DEMO
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  onGetStartedClick()
+                }}
+                className="w-full py-2.5 rounded-full bg-[#E7D7BE] text-[#08080A] text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-1.5"
+              >
+                GET STARTED
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </motion.div>
         )}

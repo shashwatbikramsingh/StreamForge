@@ -15,11 +15,11 @@ const PythonIcon = () => (
 
 const KafkaIcon = () => (
   <svg className="w-6 h-6" viewBox="0 0 100 100">
-    <circle cx="26" cy="50" r="11" fill="#18181B" />
-    <circle cx="74" cy="24" r="9" fill="#18181B" />
-    <circle cx="74" cy="76" r="9" fill="#18181B" />
-    <path d="M26 50 L74 24" stroke="#18181B" strokeWidth="5" strokeLinecap="round" />
-    <path d="M26 50 L74 76" stroke="#18181B" strokeWidth="5" strokeLinecap="round" />
+    <circle cx="26" cy="50" r="11" fill="#F5F3EF" />
+    <circle cx="74" cy="24" r="9" fill="#F5F3EF" />
+    <circle cx="74" cy="76" r="9" fill="#F5F3EF" />
+    <path d="M26 50 L74 24" stroke="#F5F3EF" strokeWidth="5" strokeLinecap="round" />
+    <path d="M26 50 L74 76" stroke="#F5F3EF" strokeWidth="5" strokeLinecap="round" />
   </svg>
 )
 
@@ -47,10 +47,9 @@ const FastAPIIcon = () => (
 
 const DashboardIcon = () => (
   <div className="w-6 h-6 flex items-end justify-center gap-0.5">
-    <span className="w-1.5 h-2.5 rounded-t-xs bg-[#EA580C]" />
-    <span className="w-1.5 h-5 rounded-t-xs bg-[#EA580C]" />
-    <span className="w-1.5 h-3.5 rounded-t-xs bg-[#F97316]" />
-    <span className="w-1.5 h-5.5 rounded-t-xs bg-[#EA580C]" />
+    <span className="w-1.5 h-2.5 rounded-t-xs bg-[#E7D7BE]" />
+    <span className="w-1.5 h-4 rounded-t-xs bg-[#EA580C]" />
+    <span className="w-1.5 h-5 rounded-t-xs bg-[#E7D7BE]" />
   </div>
 )
 
@@ -114,49 +113,49 @@ export const SystemArchitecture: React.FC<SystemArchitectureProps> = ({ onViewAr
   ]
 
   return (
-    <section id="architecture" className="w-full px-4 sm:px-6 lg:px-8 py-1 md:py-1.5">
+    <section id="architecture" className="w-full px-4 sm:px-6 lg:px-8 py-2 md:py-3 scroll-mt-12">
       
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
         
         {/* Left Column: Heading & Button */}
         <div className="lg:col-span-3 flex flex-col items-start pr-0 lg:pr-1">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFF3EA] border border-[#FED7AA]/70 text-[#9A3412] text-xs font-semibold mb-3.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#EA580C]" />
-            Architecture
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[#D4CEBF] text-[10px] font-bold tracking-widest uppercase mb-3.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />
+            <span>Infrastructure Map</span>
           </div>
 
-          <h3 className="text-2xl sm:text-[26px] font-extrabold text-[#111827] tracking-tight mb-2">
+          <h3 className="text-2xl sm:text-[26px] font-extrabold text-[#F5F3EF] tracking-tight mb-2">
             System Architecture
           </h3>
 
-          <p className="text-xs sm:text-[13px] text-neutral-500 leading-relaxed font-normal mb-6">
+          <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed font-normal mb-6">
             A scalable, modular, and production-ready data pipeline for real-time event processing.
           </p>
 
           <button
             onClick={onViewArchitecture}
-            className="px-5 py-2.5 rounded-full bg-[#18181B] hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="px-5 py-2.5 rounded-full bg-[#E7D7BE] hover:bg-[#F3E8D6] text-[#08080A] font-bold text-xs uppercase flex items-center gap-2 shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             View Full Architecture
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Right Column: Event Sources + Dashed StreamForge Pipeline Enclosure */}
+        {/* Right Column: Event Sources + Dashed StreamForge Pipeline Enclosure in Dark Glass */}
         <div className="lg:col-span-9 w-full overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
           <div className="flex items-center gap-3 min-w-[760px]">
             
             {/* Event Sources Box */}
-            <div className="w-[125px] shrink-0 bg-white rounded-2xl p-3 border border-neutral-100 shadow-[0_4px_16px_rgba(0,0,0,0.02)]">
-              <span className="block text-[10px] font-bold text-neutral-900 mb-2 uppercase tracking-wide">
+            <div className="w-[125px] shrink-0 bg-[#0E0E12]/90 rounded-2xl p-3 border border-white/[0.08] shadow-sm">
+              <span className="block text-[10px] font-bold text-[#E7D7BE] mb-2 uppercase tracking-wider">
                 Event Sources
               </span>
               <div className="space-y-1.5">
                 {sources.map((s, i) => {
                   const Icon = s.icon
                   return (
-                    <div key={i} className="flex items-center gap-1.5 text-[10px] text-neutral-600 bg-neutral-50 px-1.5 py-1 rounded-md">
-                      <Icon className="w-3 h-3 text-[#EA580C]" />
+                    <div key={i} className="flex items-center gap-1.5 text-[10px] text-[#D4CEBF] bg-white/[0.02] border border-white/[0.04] px-1.5 py-1 rounded-md">
+                      <Icon className="w-3 h-3 text-[#E7D7BE]" />
                       <span className="truncate">{s.name}</span>
                     </div>
                   )
@@ -165,13 +164,13 @@ export const SystemArchitecture: React.FC<SystemArchitectureProps> = ({ onViewAr
             </div>
 
             {/* Arrow into pipeline */}
-            <div className="text-neutral-300 shrink-0">
+            <div className="text-[#7A756D] shrink-0">
               <ChevronRight className="w-4 h-4" />
             </div>
 
             {/* Dashed StreamForge Data Pipeline Enclosure */}
-            <div className="flex-1 bg-white/70 rounded-2xl p-3 sm:p-4 border border-dashed border-orange-300 relative shadow-2xs">
-              <span className="absolute -top-2.5 left-4 px-2 py-0.2 bg-[#FAF7F2] text-[10px] font-bold text-[#EA580C] uppercase tracking-wide">
+            <div className="flex-1 bg-[#0E0E12]/80 rounded-2xl p-3 sm:p-4 border border-dashed border-[#E7D7BE]/35 relative shadow-sm">
+              <span className="absolute -top-2.5 left-4 px-2 py-0.2 bg-[#08080A] text-[10px] font-bold text-[#E7D7BE] border border-[#E7D7BE]/30 rounded-full uppercase tracking-wider">
                 StreamForge Data Pipeline
               </span>
 
@@ -187,23 +186,23 @@ export const SystemArchitecture: React.FC<SystemArchitectureProps> = ({ onViewAr
                         onClick={() => setSelectedNode(isSelected ? null : i)}
                         className={`flex-1 min-w-[78px] max-w-[130px] rounded-xl p-2 flex flex-col items-center text-center cursor-pointer transition-all ${
                           isSelected
-                            ? 'bg-orange-50 border-2 border-[#EA580C] shadow-sm'
-                            : 'bg-white hover:bg-neutral-50 border border-neutral-100 shadow-2xs'
+                            ? 'bg-[#E7D7BE]/15 border-2 border-[#E7D7BE] shadow-[0_0_15px_rgba(231,215,190,0.15)]'
+                            : 'bg-[#14141A] hover:bg-[#1A1A22] border border-white/[0.06] shadow-2xs'
                         }`}
                       >
                         <div className="w-7 h-7 flex items-center justify-center mb-1">
                           <Icon />
                         </div>
-                        <span className="text-[9.5px] font-bold text-neutral-900 leading-tight">
+                        <span className="text-[9.5px] font-bold text-[#F5F3EF] leading-tight">
                           {node.name}
                         </span>
-                        <span className="text-[8px] text-neutral-400 mt-0.5">
+                        <span className="text-[8px] text-[#A39E93] mt-0.5">
                           {node.sub}
                         </span>
                       </motion.div>
 
                       {i < pipelineNodes.length - 1 && (
-                        <div className="text-neutral-300 px-0.5 shrink-0">
+                        <div className="text-[#7A756D] px-0.5 shrink-0">
                           <ChevronRight className="w-3.5 h-3.5" />
                         </div>
                       )}
@@ -225,22 +224,22 @@ export const SystemArchitecture: React.FC<SystemArchitectureProps> = ({ onViewAr
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="mt-6 pt-4 border-t border-neutral-100 flex items-start justify-between bg-orange-50/50 rounded-xl p-4 border border-orange-100"
+            className="mt-4 pt-3 flex items-start justify-between bg-[#14141A] rounded-xl p-4 border border-[#E7D7BE]/30 shadow-lg"
           >
             <div className="flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-orange-100 text-[#EA580C] flex items-center justify-center mt-0.5 shrink-0">
+              <div className="w-6 h-6 rounded-full bg-[#E7D7BE]/15 text-[#E7D7BE] flex items-center justify-center mt-0.5 shrink-0">
                 <CheckCircle2 className="w-3.5 h-3.5" />
               </div>
               <div>
-                <span className="font-bold text-neutral-900 text-xs">
+                <span className="font-bold text-[#F5F3EF] text-xs">
                   {pipelineNodes[selectedNode].name} {pipelineNodes[selectedNode].sub}
                 </span>
-                <p className="text-xs text-neutral-600 mt-1">
+                <p className="text-xs text-[#A39E93] mt-1">
                   {pipelineNodes[selectedNode].role}
                 </p>
               </div>
             </div>
-            <button onClick={() => setSelectedNode(null)} className="text-neutral-400 hover:text-neutral-700 p-1">
+            <button onClick={() => setSelectedNode(null)} className="text-[#7A756D] hover:text-[#F5F3EF] p-1">
               <X className="w-4 h-4" />
             </button>
           </motion.div>
@@ -250,4 +249,3 @@ export const SystemArchitecture: React.FC<SystemArchitectureProps> = ({ onViewAr
     </section>
   )
 }
-

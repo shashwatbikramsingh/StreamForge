@@ -76,3 +76,4 @@ INSERT INTO rides (
 ('c2eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'rider_9082', 'driver_1994', 'Bellandur', 'Electronic City', 'STARTED', 3, 410.00, 'INR', NOW() - INTERVAL '8 minutes', NOW() - INTERVAL '6 minutes', NOW() - INTERVAL '3 minutes', NULL, NOW()),
 ('d3eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'rider_3345', NULL, 'MG Road', 'Marathahalli', 'CANCELLED', 1, 280.00, 'INR', NOW() - INTERVAL '30 minutes', NULL, NULL, NULL, NOW())
 ON CONFLICT (ride_id) DO NOTHING;
+

@@ -11,11 +11,11 @@ const PythonIcon = () => (
 
 const KafkaIcon = () => (
   <svg className="w-6 h-6" viewBox="0 0 100 100">
-    <circle cx="26" cy="50" r="11" fill="#18181B" />
-    <circle cx="74" cy="24" r="9" fill="#18181B" />
-    <circle cx="74" cy="76" r="9" fill="#18181B" />
-    <path d="M26 50 L74 24" stroke="#18181B" strokeWidth="5" strokeLinecap="round" />
-    <path d="M26 50 L74 76" stroke="#18181B" strokeWidth="5" strokeLinecap="round" />
+    <circle cx="26" cy="50" r="11" fill="#F5F3EF" />
+    <circle cx="74" cy="24" r="9" fill="#F5F3EF" />
+    <circle cx="74" cy="76" r="9" fill="#F5F3EF" />
+    <path d="M26 50 L74 24" stroke="#F5F3EF" strokeWidth="5" strokeLinecap="round" />
+    <path d="M26 50 L74 76" stroke="#F5F3EF" strokeWidth="5" strokeLinecap="round" />
   </svg>
 )
 
@@ -75,27 +75,27 @@ export const TechStack: React.FC = () => {
   ]
 
   return (
-    <section className="w-full px-4 sm:px-6 lg:px-8 py-1 md:py-1.5">
+    <section className="w-full px-4 sm:px-6 lg:px-8 py-2 md:py-3">
       {/* Centered Pill Badge */}
-      <div className="flex justify-center mb-2.5">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FFF3EA] border border-[#FED7AA]/70 text-[#9A3412] text-xs font-semibold shadow-2xs">
-          <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
-          <span>Powered by Modern Data Technologies</span>
+      <div className="flex justify-center mb-3">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[#D4CEBF] text-[10px] font-bold tracking-widest uppercase">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />
+          <span>POWERED BY MODERN DATA INFRASTRUCTURE</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
         {/* Left Heading & Copy */}
         <div className="lg:col-span-4 text-left">
-          <h2 className="text-xl sm:text-2xl font-extrabold text-[#111827] tracking-tight mb-1.5">
+          <h2 className="text-xl sm:text-2xl font-extrabold text-[#F5F3EF] tracking-tight mb-1.5">
             Our Technology Stack
           </h2>
-          <p className="text-xs sm:text-[13px] text-neutral-500 leading-relaxed font-normal">
+          <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed font-normal">
             A reliable, scalable, and modern data engineering stack built for real-time event processing.
           </p>
         </div>
 
-        {/* Right 7 Tech Cards Row */}
+        {/* Right 7 Tech Cards Row in Dark Obsidian Glass */}
         <div className="lg:col-span-8 overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
           <div className="flex items-center justify-between gap-2.5 min-w-[540px]">
             {technologies.map((tech, idx) => {
@@ -107,13 +107,13 @@ export const TechStack: React.FC = () => {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.3, delay: idx * 0.05 }}
-                  whileHover={{ y: -2, scale: 1.03 }}
-                  className="flex-1 bg-white rounded-2xl p-3 sm:p-3.5 border border-neutral-100 shadow-[0_4px_12px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_20px_rgba(234,88,12,0.06)] hover:border-orange-200/70 transition-all flex flex-col items-center justify-center text-center cursor-default group"
+                  whileHover={{ y: -2, scale: 1.02 }}
+                  className="flex-1 bg-[#0E0E12]/90 rounded-2xl p-3 sm:p-3.5 border border-white/[0.08] hover:border-[#E7D7BE]/40 hover:bg-[#14141A] transition-all flex flex-col items-center justify-center text-center cursor-default group shadow-sm"
                 >
                   <div className="w-8 h-8 flex items-center justify-center mb-1.5 group-hover:scale-110 transition-transform">
                     <Icon />
                   </div>
-                  <span className="text-[11px] font-bold text-neutral-800 group-hover:text-[#EA580C] transition-colors">
+                  <span className="text-[11px] font-bold text-[#E4DFD5] group-hover:text-[#E7D7BE] transition-colors">
                     {tech.name}
                   </span>
                 </motion.div>
@@ -125,4 +125,3 @@ export const TechStack: React.FC = () => {
     </section>
   )
 }
-

@@ -34,73 +34,73 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
   }, [])
 
   return (
-    <section id="product" className="w-full px-4 sm:px-6 lg:px-8 py-1 md:py-1.5">
+    <section id="product" className="w-full px-4 sm:px-6 lg:px-8 py-2 md:py-3 scroll-mt-12">
       
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
         {/* Left Column: Heading & Button */}
         <div className="lg:col-span-3 flex flex-col items-start pr-0 lg:pr-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFF3EA] border border-[#FED7AA]/70 text-[#9A3412] text-xs font-semibold mb-3.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#EA580C]" />
-            Product Preview
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[#D4CEBF] text-[10px] font-bold tracking-widest uppercase mb-3.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />
+            <span>Platform Telemetry</span>
           </div>
 
-          <h3 className="text-2xl sm:text-[26px] font-extrabold text-[#111827] tracking-tight mb-2">
+          <h3 className="text-2xl sm:text-[26px] font-extrabold text-[#F5F3EF] tracking-tight mb-2">
             Explore the Platform
           </h3>
 
-          <p className="text-xs sm:text-[13px] text-neutral-500 leading-relaxed font-normal mb-6">
+          <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed font-normal mb-6">
             A powerful, real-time dashboard to monitor events, pipeline health, and business metrics.
           </p>
 
           <button
             onClick={onViewDashboard}
-            className="px-5 py-2.5 rounded-full bg-[#18181B] hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
+            className="px-5 py-2.5 rounded-full bg-[#E7D7BE] hover:bg-[#F3E8D6] text-[#08080A] font-bold text-xs uppercase flex items-center gap-2 shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             View Dashboard
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Right Column: Dashboard Preview Panel */}
+        {/* Right Column: Dashboard Preview Panel in Dark Glass */}
         <motion.div 
           initial={{ opacity: 0, y: 15 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="lg:col-span-9 bg-white rounded-3xl p-4 sm:p-6 border border-neutral-100 shadow-[0_12px_36px_rgba(234,88,12,0.05)] w-full"
+          className="lg:col-span-9 bg-[#0E0E12]/90 rounded-3xl p-4 sm:p-6 border border-white/[0.08] shadow-[0_16px_50px_rgba(0,0,0,0.6)] w-full"
         >
           
           {/* 4 KPIs Row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-            <div className="p-2 sm:p-2.5 rounded-xl bg-neutral-50/70 border border-neutral-100">
-              <span className="block text-[9.5px] text-neutral-400 font-medium mb-0.5">Total Events</span>
-              <div className="text-sm sm:text-base font-bold text-neutral-900">128.4K</div>
-              <div className="flex items-center gap-0.5 text-[8.5px] font-semibold text-emerald-600 mt-0.5">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-[#14141A] border border-white/[0.06]">
+              <span className="block text-[9.5px] text-[#A39E93] font-medium mb-0.5">Total Events</span>
+              <div className="text-sm sm:text-base font-bold text-[#F5F3EF]">128.4K</div>
+              <div className="flex items-center gap-0.5 text-[8.5px] font-semibold text-emerald-400 mt-0.5">
                 <ArrowUpRight className="w-2.5 h-2.5" /> +12.6%
               </div>
             </div>
 
-            <div className="p-2 sm:p-2.5 rounded-xl bg-neutral-50/70 border border-neutral-100">
-              <span className="block text-[9.5px] text-neutral-400 font-medium mb-0.5">Processing Rate</span>
-              <div className="text-sm sm:text-base font-bold text-neutral-900">842 /s</div>
-              <div className="flex items-center gap-0.5 text-[8.5px] font-semibold text-emerald-600 mt-0.5">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-[#14141A] border border-white/[0.06]">
+              <span className="block text-[9.5px] text-[#A39E93] font-medium mb-0.5">Processing Rate</span>
+              <div className="text-sm sm:text-base font-bold text-[#F5F3EF]">842 /s</div>
+              <div className="flex items-center gap-0.5 text-[8.5px] font-semibold text-emerald-400 mt-0.5">
                 <ArrowUpRight className="w-2.5 h-2.5" /> +18.3%
               </div>
             </div>
 
-            <div className="p-2 sm:p-2.5 rounded-xl bg-neutral-50/70 border border-neutral-100">
-              <span className="block text-[9.5px] text-neutral-400 font-medium mb-0.5">Success Rate</span>
-              <div className="text-sm sm:text-base font-bold text-neutral-900">98.7%</div>
-              <div className="flex items-center gap-0.5 text-[8.5px] font-semibold text-emerald-600 mt-0.5">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-[#14141A] border border-white/[0.06]">
+              <span className="block text-[9.5px] text-[#A39E93] font-medium mb-0.5">Success Rate</span>
+              <div className="text-sm sm:text-base font-bold text-[#F5F3EF]">98.7%</div>
+              <div className="flex items-center gap-0.5 text-[8.5px] font-semibold text-emerald-400 mt-0.5">
                 <ArrowUpRight className="w-2.5 h-2.5" /> +0.9%
               </div>
             </div>
 
-            <div className="p-2 sm:p-2.5 rounded-xl bg-neutral-50/70 border border-neutral-100">
-              <span className="block text-[9.5px] text-neutral-400 font-medium mb-0.5">Failed Events</span>
-              <div className="text-sm sm:text-base font-bold text-neutral-900">1.3%</div>
-              <div className="flex items-center gap-0.5 text-[8.5px] font-semibold text-rose-500 mt-0.5">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-[#14141A] border border-white/[0.06]">
+              <span className="block text-[9.5px] text-[#A39E93] font-medium mb-0.5">Failed Events</span>
+              <div className="text-sm sm:text-base font-bold text-[#F5F3EF]">1.3%</div>
+              <div className="flex items-center gap-0.5 text-[8.5px] font-semibold text-rose-400 mt-0.5">
                 <ArrowDownRight className="w-2.5 h-2.5" /> -0.9%
               </div>
             </div>
@@ -110,24 +110,24 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
             
             {/* Widget 1: Event Volume Chart (4 cols) */}
-            <div className="md:col-span-4 p-3 rounded-2xl bg-neutral-50/60 border border-neutral-100 flex flex-col justify-between">
-              <span className="text-[10px] font-bold text-neutral-800 mb-2">Event Volume</span>
+            <div className="md:col-span-4 p-3 rounded-2xl bg-[#14141A] border border-white/[0.06] flex flex-col justify-between">
+              <span className="text-[10px] font-bold text-[#F5F3EF] mb-2">Event Volume</span>
               <div className="relative h-[95px] w-full">
                 <svg viewBox="0 0 200 90" className="w-full h-full overflow-visible">
                   <defs>
-                    <linearGradient id="previewGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#EA580C" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                    <linearGradient id="previewGoldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#E7D7BE" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="#14141A" stopOpacity="0.0" />
                     </linearGradient>
                   </defs>
                   <path 
                     d="M 10,75 C 40,75 50,55 70,55 C 90,55 105,35 125,35 C 145,35 160,20 190,25 L 190,85 L 10,85 Z" 
-                    fill="url(#previewGrad)" 
+                    fill="url(#previewGoldGrad)" 
                   />
                   <path 
                     d="M 10,75 C 40,75 50,55 70,55 C 90,55 105,35 125,35 C 145,35 160,20 190,25" 
                     fill="none" 
-                    stroke="#EA580C" 
+                    stroke="#E7D7BE" 
                     strokeWidth="2" 
                     strokeLinecap="round" 
                   />
@@ -136,36 +136,36 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
             </div>
 
             {/* Widget 2: Event Distribution Donut (4 cols) */}
-            <div className="md:col-span-4 p-3 rounded-2xl bg-neutral-50/60 border border-neutral-100 flex flex-col justify-between">
-              <span className="text-[10px] font-bold text-neutral-800 mb-1">Event Distribution</span>
+            <div className="md:col-span-4 p-3 rounded-2xl bg-[#14141A] border border-white/[0.06] flex flex-col justify-between">
+              <span className="text-[10px] font-bold text-[#F5F3EF] mb-1">Event Distribution</span>
               <div className="flex items-center justify-around gap-2 my-auto">
                 <div className="relative w-15 h-15 shrink-0 flex items-center justify-center">
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                    <circle cx="18" cy="18" r="14.5" fill="none" stroke="#F3F4F6" strokeWidth="3.5" />
+                    <circle cx="18" cy="18" r="14.5" fill="none" stroke="#22222A" strokeWidth="3.5" />
                     <circle cx="18" cy="18" r="14.5" fill="none" stroke="#10B981" strokeWidth="3.5" strokeDasharray="62, 100" strokeLinecap="round" />
                     <circle cx="18" cy="18" r="14.5" fill="none" stroke="#059669" strokeWidth="3.5" strokeDasharray="24, 100" strokeDashoffset="-63" />
-                    <circle cx="18" cy="18" r="14.5" fill="none" stroke="#EA580C" strokeWidth="3.5" strokeDasharray="10, 100" strokeDashoffset="-88" />
+                    <circle cx="18" cy="18" r="14.5" fill="none" stroke="#E7D7BE" strokeWidth="3.5" strokeDasharray="10, 100" strokeDashoffset="-88" />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-[9.5px] font-extrabold text-neutral-900 leading-none">128.4K</span>
-                    <span className="text-[7px] text-neutral-400">Total</span>
+                    <span className="text-[9.5px] font-extrabold text-[#F5F3EF] leading-none">128.4K</span>
+                    <span className="text-[7px] text-[#A39E93]">Total</span>
                   </div>
                 </div>
 
                 <div className="space-y-1 text-[8.5px]">
-                  <div className="flex items-center gap-1.5 text-neutral-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <div className="flex items-center gap-1.5 text-[#A39E93]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                     <span>Ride Booking 62%</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-neutral-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-700" />
+                  <div className="flex items-center gap-1.5 text-[#A39E93]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
                     <span>User Activity 24%</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-neutral-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#EA580C]" />
+                  <div className="flex items-center gap-1.5 text-[#A39E93]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />
                     <span>Payments 10%</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-neutral-600">
+                  <div className="flex items-center gap-1.5 text-[#A39E93]">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                     <span>Others 4%</span>
                   </div>
@@ -174,33 +174,33 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
             </div>
 
             {/* Widget 3: Recent Events Table (4 cols) */}
-            <div className="md:col-span-4 p-3 rounded-2xl bg-neutral-50/60 border border-neutral-100 flex flex-col justify-between">
-              <span className="text-[10px] font-bold text-neutral-800 mb-1.5">Recent Events</span>
+            <div className="md:col-span-4 p-3 rounded-2xl bg-[#14141A] border border-white/[0.06] flex flex-col justify-between">
+              <span className="text-[10px] font-bold text-[#F5F3EF] mb-1.5">Recent Events</span>
               <div className="overflow-x-auto">
                 <table className="w-full text-[8.5px] text-left">
                   <thead>
-                    <tr className="text-neutral-400 border-b border-neutral-200/60 pb-1">
-                      <th className="font-semibold pb-1">Event ID</th>
-                      <th className="font-semibold pb-1">Type</th>
-                      <th className="font-semibold pb-1">Status</th>
-                      <th className="font-semibold pb-1 text-right">Time</th>
+                    <tr className="text-[#7A756D] border-b border-white/[0.06]">
+                      <th className="pb-1 font-mono">Event ID</th>
+                      <th className="pb-1">Type</th>
+                      <th className="pb-1">Status</th>
+                      <th className="pb-1 font-mono">Time</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-100/70">
+                  <tbody className="divide-y divide-white/[0.04]">
                     {events.map((evt) => (
-                      <tr key={evt.id} className="py-1">
-                        <td className="py-1 font-mono text-neutral-700">{evt.id}</td>
-                        <td className="py-1 text-neutral-600 truncate max-w-[50px]">{evt.type}</td>
+                      <tr key={evt.id} className="text-[#D4CEBF]">
+                        <td className="py-1 font-mono">{evt.id}</td>
+                        <td className="py-1 font-medium">{evt.type}</td>
                         <td className="py-1">
-                          <span className={`px-1.5 py-0.2 rounded-full font-semibold ${
+                          <span className={`px-1.5 py-0.2 rounded-full font-bold text-[7.5px] ${
                             evt.status === 'Success' 
-                              ? 'bg-emerald-50 text-emerald-700' 
-                              : 'bg-rose-50 text-rose-600'
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' 
+                              : 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
                           }`}>
                             {evt.status}
                           </span>
                         </td>
-                        <td className="py-1 font-mono text-neutral-400 text-right">{evt.time}</td>
+                        <td className="py-1 font-mono text-[#7A756D]">{evt.time}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -213,7 +213,6 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
         </motion.div>
 
       </div>
-
     </section>
   )
 }

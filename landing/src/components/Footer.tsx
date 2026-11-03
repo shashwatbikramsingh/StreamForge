@@ -3,39 +3,36 @@ import { GithubIcon, LinkedinIcon, XTwitterIcon } from './SocialIcons'
 
 export const Footer: React.FC = () => {
   const links = [
-    { label: 'Product', href: '#product' },
-    { label: 'Features', href: '#features' },
-    { label: 'Architecture', href: '#architecture' },
-    { label: 'Use Cases', href: '#use-cases' },
-    { label: 'Docs', href: '#docs' },
-    { label: 'Pricing', href: '#pricing' },
+    { label: 'PLATFORM', href: '#product' },
+    { label: 'FEATURES', href: '#features' },
+    { label: 'ARCHITECTURE', href: '#architecture' },
+    { label: 'USE CASES', href: '#use-cases' },
+    { label: 'DOCS', href: '#docs' },
+    { label: 'PRICING', href: '#pricing' },
   ]
 
   return (
-    <footer className="border-t border-neutral-200/60 w-full px-4 sm:px-6 lg:px-8 py-3.5 mt-2">
+    <footer className="border-t border-white/[0.06] w-full px-4 sm:px-6 lg:px-8 py-8 mt-6 bg-[#08080A]">
       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
         
         {/* Left: StreamForge Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-end gap-[3px] h-5">
-            <span className="w-[3px] h-2.5 rounded-full bg-[#EA580C]" />
-            <span className="w-[3px] h-4 rounded-full bg-[#EA580C]" />
-            <span className="w-[3px] h-3 rounded-full bg-[#F97316]" />
-            <span className="w-[3px] h-5 rounded-full bg-[#EA580C]" />
-            <span className="w-[3px] h-3.5 rounded-full bg-[#FB923C]" />
+        <div className="flex items-center gap-3">
+          <div className="relative w-6 h-6 rounded-full border border-[#E7D7BE]/40 flex items-center justify-center">
+            <span className="w-2.5 h-2.5 rounded-full border border-[#E7D7BE]/70" />
+            <span className="absolute w-1 h-1 rounded-full bg-[#E7D7BE]" />
           </div>
-          <span className="text-base font-bold text-[#111827] tracking-tight">
+          <span className="text-[15px] font-bold text-[#F5F3EF] tracking-tight">
             StreamForge
           </span>
         </div>
 
         {/* Center: Navigation Links */}
-        <div className="flex flex-wrap items-center justify-center gap-6 text-xs font-medium text-neutral-600">
+        <div className="flex flex-wrap items-center justify-center gap-6 text-[11px] font-semibold tracking-widest text-[#A39E93]">
           {links.map((link) => (
             <a
               key={link.label}
               href={link.href}
-              className="hover:text-neutral-900 transition-colors"
+              className="hover:text-[#F5F3EF] transition-colors"
             >
               {link.label}
             </a>
@@ -43,12 +40,12 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* Right: Social Icons */}
-        <div className="flex items-center gap-4 text-neutral-500">
+        <div className="flex items-center gap-4 text-[#A39E93]">
           <a
             href="https://github.com/shashwatbikramsingh/StreamForge"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-neutral-900 transition-colors p-1"
+            className="hover:text-[#E7D7BE] transition-colors p-1"
             aria-label="GitHub"
           >
             <GithubIcon className="w-4 h-4" />
@@ -57,7 +54,7 @@ export const Footer: React.FC = () => {
             href="https://linkedin.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-neutral-900 transition-colors p-1"
+            className="hover:text-[#E7D7BE] transition-colors p-1"
             aria-label="LinkedIn"
           >
             <LinkedinIcon className="w-4 h-4" />
@@ -66,7 +63,7 @@ export const Footer: React.FC = () => {
             href="https://twitter.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-neutral-900 transition-colors p-1"
+            className="hover:text-[#E7D7BE] transition-colors p-1"
             aria-label="X / Twitter"
           >
             <XTwitterIcon className="w-4 h-4" />
@@ -75,7 +72,7 @@ export const Footer: React.FC = () => {
 
       </div>
 
-      <div className="mt-6 pt-4 border-t border-neutral-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-neutral-400 gap-2">
+      <div className="mt-6 pt-4 border-t border-white/[0.04] flex flex-col sm:flex-row items-center justify-between text-[11px] text-[#7A756D] gap-2">
         <span>© {new Date().getFullYear()} StreamForge. All rights reserved.</span>
         <span>Built with Apache Kafka, Spark, PostgreSQL, FastAPI & React.</span>
       </div>

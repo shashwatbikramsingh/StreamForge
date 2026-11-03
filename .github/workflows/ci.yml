@@ -44,3 +44,4 @@ jobs:
       - name: Verify Backend Import
         working-directory: ./backend
         run: python -c "from app.main import app; print('FastAPI app loaded successfully')"
+
