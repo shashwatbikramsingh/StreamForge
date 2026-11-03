@@ -75,50 +75,48 @@ export const TechStack: React.FC = () => {
   ]
 
   return (
-    <section className="w-full px-4 sm:px-6 lg:px-8 py-2 md:py-3">
-      {/* Centered Pill Badge */}
-      <div className="flex justify-center mb-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[#D4CEBF] text-[10px] font-bold tracking-widest uppercase">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />
-          <span>POWERED BY MODERN DATA INFRASTRUCTURE</span>
-        </div>
-      </div>
+    <section className="w-full py-10 md:py-16 border-y border-white/[0.04] bg-white/[0.01]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Heading & Copy */}
+          <div className="lg:col-span-4 text-left">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[#D4CEBF] text-[10px] font-bold tracking-widest uppercase mb-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />
+              <span>DATA INFRASTRUCTURE</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#F5F3EF] tracking-tight mb-2">
+              Our Technology Stack
+            </h2>
+            <p className="text-sm text-[#A39E93] leading-relaxed font-normal">
+              A reliable, scalable, and modern data engineering stack built for real-time event processing.
+            </p>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-        {/* Left Heading & Copy */}
-        <div className="lg:col-span-4 text-left">
-          <h2 className="text-xl sm:text-2xl font-extrabold text-[#F5F3EF] tracking-tight mb-1.5">
-            Our Technology Stack
-          </h2>
-          <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed font-normal">
-            A reliable, scalable, and modern data engineering stack built for real-time event processing.
-          </p>
-        </div>
-
-        {/* Right 7 Tech Cards Row in Dark Obsidian Glass */}
-        <div className="lg:col-span-8 overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
-          <div className="flex items-center justify-between gap-2.5 min-w-[540px]">
-            {technologies.map((tech, idx) => {
-              const Icon = tech.icon
-              return (
-                <motion.div
-                  key={tech.name}
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.3, delay: idx * 0.05 }}
-                  whileHover={{ y: -2, scale: 1.02 }}
-                  className="flex-1 bg-[#0E0E12]/90 rounded-2xl p-3 sm:p-3.5 border border-white/[0.08] hover:border-[#E7D7BE]/40 hover:bg-[#14141A] transition-all flex flex-col items-center justify-center text-center cursor-default group shadow-sm"
-                >
-                  <div className="w-8 h-8 flex items-center justify-center mb-1.5 group-hover:scale-110 transition-transform">
-                    <Icon />
-                  </div>
-                  <span className="text-[11px] font-bold text-[#E4DFD5] group-hover:text-[#E7D7BE] transition-colors">
-                    {tech.name}
-                  </span>
-                </motion.div>
-              )
-            })}
+          {/* Right 7 Tech Cards Row in Dark Obsidian Glass */}
+          <div className="lg:col-span-8 overflow-x-auto pb-2 lg:pb-0 scrollbar-none">
+            <div className="flex items-center justify-between gap-3 min-w-[540px]">
+              {technologies.map((tech, idx) => {
+                const Icon = tech.icon
+                return (
+                  <motion.div
+                    key={tech.name}
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.3, delay: idx * 0.05 }}
+                    whileHover={{ y: -3, scale: 1.02 }}
+                    className="flex-1 bg-[#0E0E12] rounded-2xl p-4 border border-white/[0.08] hover:border-[#E7D7BE]/40 hover:bg-[#14141A] transition-all flex flex-col items-center justify-center text-center cursor-default group shadow-md"
+                  >
+                    <div className="w-8 h-8 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                      <Icon />
+                    </div>
+                    <span className="text-xs font-semibold text-[#E4DFD5] group-hover:text-[#E7D7BE] transition-colors">
+                      {tech.name}
+                    </span>
+                  </motion.div>
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>

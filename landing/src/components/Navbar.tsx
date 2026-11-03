@@ -21,8 +21,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
   ]
 
   return (
-    <header className="sticky top-0 z-50 w-full px-4 sm:px-6 lg:px-8 py-3.5 bg-[#08080A]/80 backdrop-blur-xl border-b border-white/[0.06] transition-all">
-      <nav className="flex items-center justify-between">
+    <header className="sticky top-0 z-50 w-full px-4 sm:px-6 lg:px-8 py-3.5 bg-[#08080A]/85 backdrop-blur-xl border-b border-white/[0.08] transition-all">
+      <nav className="max-w-7xl mx-auto flex items-center justify-between">
         
         {/* Left: Brand Logo matching the Dribbble shot's luxury concentric spiral mark */}
         <a href="#" className="flex items-center gap-3 group">

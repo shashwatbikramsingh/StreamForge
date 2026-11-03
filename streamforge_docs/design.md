@@ -6,7 +6,8 @@
 
 - **Aesthetic:** Obsidian Noir & Champagne Gold Luxury Streaming Telemetry (inspired by high-end telemetry and governance planes).
 - **Canvas:** Deep Obsidian Noir (`#08080A`) canvas with subtle warm ember/champagne ambient haze and micro-particle grid texture.
-- **Hero Centerpiece:** High-performance HTML5 3D perspective particle mesh terrain (`ParticleTerrain.tsx`) simulating real-time undulating event waveforms with interactive cursor parallax.
+- **Hero Centerpiece:** Centered editorial composition with a high-performance HTML5 3D perspective particle mesh terrain (`ParticleTerrain.tsx`) simulating real-time undulating event waveforms, complete with interactive cursor parallax displacement and anchored playback scrub telemetry.
+- **Platform Showcase:** Full-width dedicated StreamForge Studio console (`ProductPreview.tsx` + `DashboardMockup.tsx`) with KPI cards, cubic bezier volume chart, donut health gauge, and live auto-updating event stream ticker.
 - **Containers:** Obsidian glass cards (`bg-[#0E0E12] border border-white/[0.08]`) with multi-layered specular highlights, inner sheen, and subtle golden ring iconography.
 - **Accents:** Champagne Gold (`#E7D7BE`) for primary badges and CTAs, coupled with Warm Ember (`#EA580C`) for active telemetry and streaming pulse indicators.
 
@@ -30,35 +31,29 @@
 ## 3. Typography & Hierarchy
 
 - **Display Face:** High-clarity geometric grotesque (*Inter* / *Plus Jakarta Sans*).
-- **Eyebrow Headers:** `10px`–`11px` uppercase with generous letter spacing (`tracking-[0.2em] font-semibold text-[#E7D7BE]`).
-- **Hero Title:** 3-line cadence display (`text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-white`).
-- **Section Headers:** `28px`–`36px` (`font-bold tracking-tight text-[#F5F3EF]`).
-- **Card Headings:** `16px`–`18px` (`font-semibold text-white`).
-- **Body:** `14px`–`15px` (`text-[#A39E93] leading-relaxed`).
+- **Hero Title:** 3-line cadence centered display (`text-4xl sm:text-6xl lg:text-[72px] font-extrabold tracking-tight leading-[1.04]`).
+- **Section Headers:** `28px`–`36px` / `text-3xl sm:text-4xl` (`font-extrabold tracking-tight text-[#F5F3EF]`).
+- **Card Headings:** `15px`–`18px` (`font-bold text-[#F5F3EF]`).
+- **Body:** `14px`–`16px` (`text-[#A39E93] leading-relaxed`).
 - **Monospace Telemetry:** `10px`–`12px` UI monospace for technical coordinates, latency timings, and topic names.
 
-## 4. Component Patterns
+## 4. Layout Architecture & Spatial Rhythm
 
-- **Brand Mark:** Concentric glowing golden telemetry rings symbolizing continuous event loops.
-- **3D Particle Waveform:** Canvas-driven dynamic grid mesh reacting to time and pointer coordinates.
-- **Hero Audio/Playback Scrub Bar:** Dribbble-inspired bottom control plane with playback toggle, animated progress bar, and live cluster state indicator (`CLUSTERS ACTIVE: 4/4`).
-- **Dashboard Glass Card:** High-contrast dark telemetry mockups featuring SVG champagne area charts, donut health gauges, and live event ticker streams.
-- **Pill Badges:** Translucent champagne pills (`bg-[#E7D7BE]/10 border border-[#E7D7BE]/20 text-[#E7D7BE]`) with pulsating ember telemetry dots.
-- **Buttons:**
-  - *Primary CTA:* Solid Champagne Gold pill (`bg-[#E7D7BE] hover:bg-[#F3E8D7] text-[#08080A] font-semibold rounded-full uppercase tracking-wider`).
-  - *Secondary CTA:* Obsidian glass outline pill (`bg-white/[0.03] hover:bg-white/[0.08] border border-white/15 text-white rounded-full`).
-  - *Ghost / Link CTA:* Champagne text with hover underline or icon slide animation.
-- **System Architecture Flow:** Interactive architecture diagram with clickable nodes, animated signal flow, and slide-in specification drawer.
+- **Global Container System:** Standardized `max-w-7xl mx-auto px-4 sm:px-6 lg:px-8` across all 12 sections. Eliminates awkward 2000px line-stretch while maintaining full edge-to-edge luxury background atmosphere.
+- **Section Pacing:** Generous, intentional vertical rhythm (`py-12 md:py-20`) eliminating suffocating gaps and chaotic wall-to-wall card crowding.
+- **Hero vs Product Preview Separation:**
+  - *Hero:* Authoritative centered typography + CTAs leading directly into an expansive, dedicated 3D particle terrain window with anchored scrub bar telemetry.
+  - *Product Preview:* Dedicated full-width interactive operations studio showcase featuring the complete `DashboardMockup` and live auto-updating event stream ticker.
+- **Bento & Split Grid Systems:**
+  - *Problem vs Solution:* Balanced 2-column comparative split with central directional transition arrow.
+  - *Features:* 4x2 matrix with 11px icon badges and hover elevations.
+  - *Architecture:* Dedicated interactive topology with clickable nodes and inspection drawer.
+  - *Use Cases & Reliability:* Dual-column industry scenarios vs reliability engineering ledger.
+  - *Docs & Pricing:* 4-column developer portal paired with transparent 3-tier pricing spotlighting the Pro tier.
 
 ## 5. Motion & Micro-Interactions
 
-- **Particle Mesh:** Mathematical sine-cosine wave oscillation at 60fps with mouse parallax displacement.
-- **Physics:** `framer-motion` ease-out spring curves (`ease: [0.16, 1, 0.3, 1]`).
-- **Live Stream Simulator:** Event counters dynamically ticking upward with fluctuating sub-second latency readings.
-- **Hover Micro-interactions:** Specular highlight shift, subtle border glow brightening (`border-white/20`), and icon translate-x triggers.
-
-## 6. Layout Density & Spacing System
-
-- **Global Container Width:** 100% fluid edge-to-edge layout (`w-full px-4 sm:px-6 lg:px-8`) with intentional full bleed across widescreen viewports.
-- **Vertical Section Rhythm:** Unified parent flex column cadence (`gap-2 sm:gap-2.5 md:gap-3`) with compact section padding (`py-1 md:py-1.5`) eliminating dead space.
-- **WCAG Compliance:** Contrast ratios strictly exceed 4.5:1 across all interactive copy, modal dialogues, and tabular telemetry data.
+- **3D Particle Waveform:** Sine-cosine surface equation oscillating at 60fps with mouse cursor parallax displacement.
+- **Physics Curves:** `framer-motion` ease-out spring curves (`ease: [0.16, 1, 0.3, 1]`).
+- **Live Event Feed:** Continuous synthetic stream simulation updating at ~2.8s intervals with realistic latency and partition assignments.
+- **WCAG Compliance:** Contrast ratios strictly exceed 4.5:1 across all copy and modal interfaces.

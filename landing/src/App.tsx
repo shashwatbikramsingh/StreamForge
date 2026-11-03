@@ -31,8 +31,8 @@ export function App() {
       />
 
       {/* Main Landing Page Flow */}
-      <main className="flex flex-col gap-2 sm:gap-2.5 md:gap-3 w-full">
-        {/* 2. Hero Section with Live Dashboard Mockup */}
+      <main className="flex flex-col w-full">
+        {/* 2. Hero Section with Live 3D Particle Waveform & Telemetry */}
         <Hero 
           onGetStartedClick={() => setGetStartedModalOpen(true)}
           onExploreClick={() => setExploreModalOpen(true)}
