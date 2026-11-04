@@ -36,7 +36,8 @@
 | **Stream Processing** | Apache Spark (PySpark) | Windowed aggregations, deduplication, and anomaly checks |
 | **Storage & Persistence** | PostgreSQL 16 | Relational storage for analytics tables and DLQ payloads |
 | **API Layer** | FastAPI | High-performance asynchronous REST telemetry layer |
-| **Frontend UI** | React 19, Vite, Tailwind CSS v4 | 100% fluid edge-to-edge interactive landing page & live dashboard |
+| **Frontend UI** | React 19, Vite, Tailwind CSS v4 | Obsidian Noir & Champagne Gold luxury telemetry landing page |
+| **Hero Visual** | HTML5 Canvas 3D Particle Wave | 60fps interactive undulating particle terrain with cursor parallax |
 | **Animations** | Framer Motion | Smooth springs, waveform pulses, and telemetry transitions |
 | **Containerization** | Docker & Docker Compose | Multi-container reproducible orchestration |
 
@@ -148,6 +149,7 @@ StreamForge/
 │   │   ├── components/         # Modular landing page sections & modals
 │   │   │   ├── Navbar.tsx
 │   │   │   ├── Hero.tsx
+│   │   │   ├── ParticleTerrain.tsx
 │   │   │   ├── DashboardMockup.tsx
 │   │   │   ├── TechStack.tsx
 │   │   │   ├── ProblemSolution.tsx
