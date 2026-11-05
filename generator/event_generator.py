@@ -177,3 +177,4 @@ class EventGenerator:
 if __name__ == "__main__":
     generator = EventGenerator(KAFKA_BOOTSTRAP, TOPIC_NAME)
     generator.run()
+

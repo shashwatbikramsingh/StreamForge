@@ -36,3 +36,4 @@ python event_generator.py
 | `TOPIC_NAME` | `ride-events` | Target Kafka topic |
 | `EVENTS_PER_SECOND` | `5.0` | Emission throughput |
 | `ENABLE_ANOMALIES` | `true` | Toggle test anomaly injection |
+
