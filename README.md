@@ -77,7 +77,7 @@ flowchart LR
 
 ### Option 1: Full-Stack Docker Compose (Recommended)
 
-Run Kafka, PostgreSQL (with initialized schema), FastAPI, and the Web UI in containers:
+Run Kafka (KRaft), PostgreSQL (with initialized schema), FastAPI, the Synthetic Event Generator, and the Web UI in containers:
 
 ```bash
 # Clone the repository
@@ -92,6 +92,7 @@ docker compose up -d
 - **FastAPI Telemetry Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Kafka Broker:** `localhost:9092`
 - **PostgreSQL Database:** `localhost:5432` (`streamforge`)
+- **Event Generator:** Producing continuous ride lifecycle events into Kafka topic `ride-events`
 
 ---
 
@@ -130,6 +131,19 @@ Open interactive Swagger API documentation at [http://localhost:8000/docs](http:
 
 ---
 
+### Option 4: Local Synthetic Event Generator
+
+```bash
+cd generator
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python event_generator.py
+```
+Synthesizes monotonic ride events, partition-keyed by `ride_id` with 3-timestamp envelopes.
+
+---
+
 ## 📂 Project Structure
 
 ```
@@ -139,11 +153,16 @@ StreamForge/
 │   └── deploy-pages.yml
 ├── backend/                    # FastAPI telemetry & query service
 │   ├── app/
-│   │   └── main.py             # Health checks, metrics & live event endpoints
+│   │   └── main.py             # Health checks, PostgreSQL metrics, DLQ & events
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── docker/                     # Infrastructure configuration
 │   └── init-db.sql             # PostgreSQL schema (processed_events, rides, dlq)
+├── generator/                  # Synthetic ride lifecycle event generator
+│   ├── event_generator.py      # Kafka producer with anomaly & duplicate injection
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── README.md
 ├── landing/                    # React 19 + Vite + Tailwind v4 web app
 │   ├── src/
 │   │   ├── components/         # Modular landing page sections & modals

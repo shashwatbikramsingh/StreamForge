@@ -77,6 +77,21 @@ services:
     depends_on:
       - api
 
+  # 5. Synthetic Event Generator & Kafka Producer
+  generator:
+    build:
+      context: ./generator
+      dockerfile: Dockerfile
+    container_name: streamforge-generator
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TOPIC_NAME: ride-events
+      EVENTS_PER_SECOND: "5.0"
+      ENABLE_ANOMALIES: "true"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
 volumes:
   postgres_data:
 
