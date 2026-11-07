@@ -77,7 +77,7 @@ flowchart LR
 
 ### Option 1: Full-Stack Docker Compose (Recommended)
 
-Run Kafka (KRaft), PostgreSQL (with initialized schema), FastAPI, the Synthetic Event Generator, and the Web UI in containers:
+Run Kafka (KRaft), PostgreSQL (with initialized schema), FastAPI, the Synthetic Event Generator, the Stream Consumer Validator, and the Web UI in containers:
 
 ```bash
 # Clone the repository
@@ -93,6 +93,7 @@ docker compose up -d
 - **Kafka Broker:** `localhost:9092`
 - **PostgreSQL Database:** `localhost:5432` (`streamforge`)
 - **Event Generator:** Producing continuous ride lifecycle events into Kafka topic `ride-events`
+- **Stream Consumer:** Validating schemas, writing idempotent records, and managing DLQ isolation
 
 ---
 
@@ -144,6 +145,28 @@ Synthesizes monotonic ride events, partition-keyed by `ride_id` with 3-timestamp
 
 ---
 
+### Option 5: Local Stream Consumer & Validator
+
+```bash
+cd consumer
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python consumer.py
+```
+Validates Kafka event streams, executes idempotent database writes, maintains monotonic state, and quarantines corrupted payloads.
+
+---
+
+### Option 6: Automated Test Suite
+
+```bash
+python -m unittest discover tests
+```
+Executes contract validation tests, idempotency checks, and state machine verification.
+
+---
+
 ## 📂 Project Structure
 
 ```
@@ -156,6 +179,11 @@ StreamForge/
 │   │   └── main.py             # Health checks, PostgreSQL metrics, DLQ & events
 │   ├── Dockerfile
 │   └── requirements.txt
+├── consumer/                   # Kafka stream consumer & schema validator
+│   ├── consumer.py             # At-least-once consumer with DLQ and idempotency
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── README.md
 ├── docker/                     # Infrastructure configuration
 │   └── init-db.sql             # PostgreSQL schema (processed_events, rides, dlq)
 ├── generator/                  # Synthetic ride lifecycle event generator
@@ -163,6 +191,8 @@ StreamForge/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── README.md
+├── tests/                      # Automated pipeline test suite
+│   └── test_stream_pipeline.py # Contract validation & idempotency tests
 ├── landing/                    # React 19 + Vite + Tailwind v4 web app
 │   ├── src/
 │   │   ├── components/         # Modular landing page sections & modals

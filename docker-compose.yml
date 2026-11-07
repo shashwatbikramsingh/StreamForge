@@ -92,6 +92,23 @@ services:
       kafka:
         condition: service_healthy
 
+  # 6. Kafka Stream Consumer & Database Validator
+  consumer:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    container_name: streamforge-consumer
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      TOPIC_NAME: ride-events
+      CONSUMER_GROUP: streamforge-consumers
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/streamforge
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:
 

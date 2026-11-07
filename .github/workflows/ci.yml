@@ -45,3 +45,6 @@ jobs:
         working-directory: ./backend
         run: python -c "from app.main import app; print('FastAPI app loaded successfully')"
 
+      - name: Run Pipeline Unit Tests
+        run: python -m unittest discover tests
+
