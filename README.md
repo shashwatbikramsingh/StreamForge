@@ -176,6 +176,15 @@ Measures event synthesis, serialization, schema validation, and deduplication th
 
 ---
 
+### Option 8: Cluster Health Diagnostics
+
+```bash
+python scripts/verify_cluster.py
+```
+Executes health and readiness probes across Kafka KRaft brokers, PostgreSQL tables, and FastAPI endpoints.
+
+---
+
 ## 📂 Project Structure
 
 ```
@@ -201,7 +210,8 @@ StreamForge/
 │   ├── requirements.txt
 │   └── README.md
 ├── scripts/                    # Engineering utilities & performance benchmarks
-│   └── benchmark_pipeline.py   # High-throughput throughput & latency harness
+│   ├── benchmark_pipeline.py   # High-throughput throughput & latency harness
+│   └── verify_cluster.py       # Cluster health check & diagnostic runner
 ├── tests/                      # Automated pipeline test suite
 │   └── test_stream_pipeline.py # Contract validation & idempotency tests
 ├── landing/                    # React 19 + Vite + Tailwind v4 web app

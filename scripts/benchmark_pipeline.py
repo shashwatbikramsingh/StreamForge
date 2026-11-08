@@ -88,3 +88,4 @@ def run_benchmark(iterations: int = 10000):
 if __name__ == "__main__":
     count = int(sys.argv[1]) if len(sys.argv) > 1 else 10000
     run_benchmark(count)
+
