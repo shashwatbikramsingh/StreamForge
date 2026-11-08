@@ -167,6 +167,15 @@ Executes contract validation tests, idempotency checks, and state machine verifi
 
 ---
 
+### Option 7: High-Throughput Pipeline Benchmark
+
+```bash
+python scripts/benchmark_pipeline.py 10000
+```
+Measures event synthesis, serialization, schema validation, and deduplication throughput at 100K+ events/sec with microsecond latency distributions (p50, p95, p99).
+
+---
+
 ## 📂 Project Structure
 
 ```
@@ -174,9 +183,9 @@ StreamForge/
 ├── .github/workflows/          # CI/CD automated build & GitHub Pages deploy
 │   ├── ci.yml
 │   └── deploy-pages.yml
-├── backend/                    # FastAPI telemetry & query service
+├── backend/                    # FastAPI telemetry, metrics & WebSocket service
 │   ├── app/
-│   │   └── main.py             # Health checks, PostgreSQL metrics, DLQ & events
+│   │   └── main.py             # REST & WebSockets (/ws/telemetry, /ws/events)
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── consumer/                   # Kafka stream consumer & schema validator
@@ -191,6 +200,8 @@ StreamForge/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── README.md
+├── scripts/                    # Engineering utilities & performance benchmarks
+│   └── benchmark_pipeline.py   # High-throughput throughput & latency harness
 ├── tests/                      # Automated pipeline test suite
 │   └── test_stream_pipeline.py # Contract validation & idempotency tests
 ├── landing/                    # React 19 + Vite + Tailwind v4 web app

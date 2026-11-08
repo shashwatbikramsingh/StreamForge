@@ -8,7 +8,7 @@ interface ProductPreviewProps {
 }
 
 export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard }) => {
-  const [isConnectedToBackend, setIsConnectedToBackend] = useState(false)
+  const [connectionMode, setConnectionMode] = useState<'websocket' | 'rest' | 'simulated'>('simulated')
   const [events, setEvents] = useState([
     { id: 'EVT-94281', type: 'ride_booked', status: 'Success', time: '11:00:24', partition: 'P-02', latency: '4.2ms' },
     { id: 'EVT-94280', type: 'payment', status: 'Success', time: '10:59:58', partition: 'P-01', latency: '3.8ms' },
@@ -16,14 +16,61 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
     { id: 'EVT-94288', type: 'ride_completed', status: 'Failed', time: '10:59:32', partition: 'P-00 (DLQ)', latency: '12.4ms' },
   ])
 
-  // Live telemetry fetch with seamless local fallback
   useEffect(() => {
     let isMounted = true
+    let ws: WebSocket | null = null
+    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+    const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/events'
 
-    const fetchLiveEvents = async () => {
+    // 1. Attempt WebSocket connection
+    try {
+      ws = new WebSocket(wsUrl)
+      ws.onopen = () => {
+        if (isMounted) {
+          setConnectionMode('websocket')
+        }
+      }
+      ws.onmessage = (msgEvent) => {
+        if (!isMounted) return
+        try {
+          const data = JSON.parse(msgEvent.data)
+          if (data && data.event_id) {
+            const formatted = {
+              id: data.event_id,
+              type: data.event_type.toLowerCase().replace('ride_', ''),
+              status: data.status,
+              time: new Date(data.occurred_at).toTimeString().split(' ')[0],
+              partition: data.partition || 'P-01',
+              latency: `${data.latency_ms || 4.2}ms`,
+            }
+            setEvents((prev) => [formatted, ...prev.slice(0, 3)])
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+      ws.onerror = () => {
+        if (isMounted && connectionMode === 'websocket') {
+          setConnectionMode('simulated')
+        }
+      }
+      ws.onclose = () => {
+        if (isMounted && connectionMode === 'websocket') {
+          setConnectionMode('simulated')
+        }
+      }
+    } catch {
+      // WebSocket initialization failure
+    }
+
+    // 2. Fallback polling & local event generator loop
+    const fallbackInterval = setInterval(async () => {
+      if (!isMounted) return
+      if (ws && ws.readyState === WebSocket.OPEN) return // WebSocket is healthy
+
+      // Try REST
       try {
-        const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-        const res = await fetch(`${apiUrl}/api/v1/events/recent?limit=4`, { signal: AbortSignal.timeout(2000) })
+        const res = await fetch(`${apiUrl}/api/v1/events/recent?limit=4`, { signal: AbortSignal.timeout(1800) })
         if (res.ok) {
           const data = await res.json()
           if (isMounted && Array.isArray(data) && data.length > 0) {
@@ -35,7 +82,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
               partition: item.partition || 'P-01',
               latency: `${item.latency_ms || 4.2}ms`,
             })))
-            setIsConnectedToBackend(true)
+            setConnectionMode('rest')
             return
           }
         }
@@ -43,30 +90,30 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
         // Backend offline, fallback to simulation
       }
 
-      if (isMounted) {
-        setIsConnectedToBackend(false)
-        const types = ['ride_booked', 'payment', 'ride_completed', 'user_login']
-        const randomType = types[Math.floor(Math.random() * types.length)]
-        const isFailed = Math.random() < 0.12
-        const now = new Date()
-        const timeStr = now.toTimeString().split(' ')[0]
-        const newEvt = {
-          id: `EVT-${Math.floor(10000 + Math.random() * 90000)}`,
-          type: randomType,
-          status: isFailed ? 'Failed' : 'Success',
-          time: timeStr,
-          partition: isFailed ? 'P-00 (DLQ)' : `P-0${Math.floor(Math.random() * 4)}`,
-          latency: `${(3 + Math.random() * 6).toFixed(1)}ms`,
-        }
-        setEvents((prev) => [newEvt, ...prev.slice(0, 3)])
+      // Pure client-side simulation fallback
+      setConnectionMode('simulated')
+      const types = ['ride_booked', 'payment', 'ride_completed', 'user_login']
+      const randomType = types[Math.floor(Math.random() * types.length)]
+      const isFailed = Math.random() < 0.12
+      const now = new Date()
+      const timeStr = now.toTimeString().split(' ')[0]
+      const newEvt = {
+        id: `EVT-${Math.floor(10000 + Math.random() * 90000)}`,
+        type: randomType,
+        status: isFailed ? 'Failed' : 'Success',
+        time: timeStr,
+        partition: isFailed ? 'P-00 (DLQ)' : `P-0${Math.floor(Math.random() * 4)}`,
+        latency: `${(3 + Math.random() * 6).toFixed(1)}ms`,
       }
-    }
+      setEvents((prev) => [newEvt, ...prev.slice(0, 3)])
+    }, 2800)
 
-    fetchLiveEvents()
-    const interval = setInterval(fetchLiveEvents, 2800)
     return () => {
       isMounted = false
-      clearInterval(interval)
+      if (ws) {
+        ws.close()
+      }
+      clearInterval(fallbackInterval)
     }
   }, [])
 
@@ -124,13 +171,15 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
               <Activity className="w-4 h-4 text-[#E7D7BE]" />
               <h3 className="text-sm font-bold text-[#F5F3EF]">Live Event Stream Ticker</h3>
               <span className="text-[10px] text-[#A39E93] font-mono ml-2">
-                {isConnectedToBackend ? '(Connected to FastAPI)' : '(Local Simulation)'}
+                {connectionMode === 'websocket' ? '(WebSocket Connected)' : connectionMode === 'rest' ? '(REST Polling Active)' : '(Local Simulation)'}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${isConnectedToBackend ? 'bg-cyan-400' : 'bg-emerald-400'} animate-pulse`} />
+              <span className={`w-2 h-2 rounded-full ${
+                connectionMode === 'websocket' ? 'bg-cyan-400' : connectionMode === 'rest' ? 'bg-emerald-400' : 'bg-[#E7D7BE]'
+              } animate-pulse`} />
               <span className="text-[11px] font-mono text-[#D4CEBF]">
-                {isConnectedToBackend ? 'FASTAPI REST ACTIVE' : 'INGESTION ACTIVE'}
+                {connectionMode === 'websocket' ? 'WEBSOCKET ACTIVE' : connectionMode === 'rest' ? 'FASTAPI REST' : 'INGESTION ACTIVE'}
               </span>
             </div>
           </div>

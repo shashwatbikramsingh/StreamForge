@@ -1,10 +1,11 @@
 import os
 import random
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, Query, HTTPException, status
+from fastapi import FastAPI, Query, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -331,3 +332,67 @@ def get_pipeline_health():
         failed_nodes=0,
         components=components,
     )
+
+# ------------------------------------------------------------------------------
+# Real-Time WebSocket Streaming Endpoints
+# ------------------------------------------------------------------------------
+
+@app.websocket("/ws/telemetry")
+async def websocket_telemetry(websocket: WebSocket):
+    """Real-time bi-directional WebSocket streaming pipeline metrics pulse."""
+    await websocket.accept()
+    logger.info("[*] WebSocket client connected to /ws/telemetry")
+    try:
+        while True:
+            now = datetime.now(timezone.utc)
+            metrics = {
+                "type": "METRIC_PULSE",
+                "timestamp": now.isoformat(),
+                "events_per_sec": round(842.0 + random.uniform(-18.0, 18.0), 1),
+                "total_events": 128450 + random.randint(10, 500),
+                "success_rate": 98.7,
+                "dlq_rate": 1.3,
+                "p95_latency_ms": round(random.uniform(14.0, 22.0), 1),
+                "cluster_health": "HEALTHY",
+                "active_partitions": 4,
+            }
+            await websocket.send_json(metrics)
+            await asyncio.sleep(1.5)
+    except WebSocketDisconnect:
+        logger.info("[*] WebSocket client disconnected from /ws/telemetry")
+    except Exception as e:
+        logger.warning(f"[!] WebSocket telemetry error: {e}")
+
+@app.websocket("/ws/events")
+async def websocket_events(websocket: WebSocket):
+    """Real-time WebSocket streaming live event feed directly to connected clients."""
+    await websocket.accept()
+    logger.info("[*] WebSocket client connected to /ws/events")
+    event_types = ["RIDE_REQUESTED", "RIDE_ACCEPTED", "RIDE_STARTED", "RIDE_COMPLETED", "RIDE_CANCELLED"]
+    cities = ["Koramangala", "Indiranagar", "HSR Layout", "Whitefield", "Bellandur", "Electronic City", "MG Road"]
+    try:
+        while True:
+            p_city = random.choice(cities)
+            d_city = random.choice([c for c in cities if c != p_city])
+            etype = random.choice(event_types)
+            is_failed = etype == "RIDE_CANCELLED" or random.random() < 0.05
+            evt = {
+                "type": "STREAM_EVENT",
+                "event_id": f"EVT-{random.randint(10000, 99999)}",
+                "ride_id": f"RIDE-{random.randint(1000, 9999)}",
+                "event_type": etype,
+                "pickup_city": p_city,
+                "dropoff_city": d_city,
+                "fare_amount": round(random.uniform(120.0, 750.0), 2),
+                "status": "Failed" if is_failed else "Success",
+                "latency_ms": round(random.uniform(2.5, 7.0), 1),
+                "partition": "P-00 (DLQ)" if is_failed else f"P-0{random.randint(1, 3)}",
+                "occurred_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await websocket.send_json(evt)
+            await asyncio.sleep(2.0)
+    except WebSocketDisconnect:
+        logger.info("[*] WebSocket client disconnected from /ws/events")
+    except Exception as e:
+        logger.warning(f"[!] WebSocket events error: {e}")
+

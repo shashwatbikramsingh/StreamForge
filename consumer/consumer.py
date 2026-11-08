@@ -316,3 +316,4 @@ class StreamConsumer:
 if __name__ == "__main__":
     consumer = StreamConsumer(KAFKA_BOOTSTRAP, TOPIC_NAME, CONSUMER_GROUP, DATABASE_URL)
     consumer.run()
+

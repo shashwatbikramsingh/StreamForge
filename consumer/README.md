@@ -34,3 +34,4 @@ python consumer.py
 | `TOPIC_NAME` | `ride-events` | Target Kafka topic |
 | `CONSUMER_GROUP` | `streamforge-consumers` | Consumer group ID |
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/streamforge` | PostgreSQL connection URL |
+

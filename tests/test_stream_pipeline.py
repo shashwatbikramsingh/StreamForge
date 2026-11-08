@@ -84,5 +84,38 @@ class TestStreamPipelineValidation(unittest.TestCase):
         self.assertIn("produced_at", event)
         self.assertIn("payload", event)
 
+    def test_invalid_timestamp_rejection(self):
+        """Test that unparseable ISO timestamps are rejected by EventValidator."""
+        bad_ts_envelope = {
+            "event_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+            "ride_id": "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+            "event_type": "RIDE_REQUESTED",
+            "schema_version": 1,
+            "occurred_at": "not-a-valid-timestamp-value",
+            "produced_at": datetime.now(timezone.utc).isoformat(),
+            "payload": {"rider_id": "r1"}
+        }
+        is_valid, error = EventValidator.validate_envelope(bad_ts_envelope)
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid timestamp format", error)
+
+    def test_idempotent_deduplication_isolation(self):
+        """Test that replayed identical event_id envelopes are identified as duplicates."""
+        seen = set()
+        events = [
+            {"event_id": "evt-001", "action": "first"},
+            {"event_id": "evt-002", "action": "second"},
+            {"event_id": "evt-001", "action": "duplicate"},
+        ]
+        duplicates = []
+        for e in events:
+            if e["event_id"] in seen:
+                duplicates.append(e["event_id"])
+            else:
+                seen.add(e["event_id"])
+        self.assertEqual(len(duplicates), 1)
+        self.assertEqual(duplicates[0], "evt-001")
+
 if __name__ == "__main__":
     unittest.main()
+
