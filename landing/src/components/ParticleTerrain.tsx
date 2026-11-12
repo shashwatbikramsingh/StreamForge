@@ -1,7 +1,16 @@
 import React, { useEffect, useRef } from 'react'
 
-export const ParticleTerrain: React.FC = () => {
+interface ParticleTerrainProps {
+  isPlaying?: boolean
+}
+
+export const ParticleTerrain: React.FC<ParticleTerrainProps> = ({ isPlaying = true }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const isPlayingRef = useRef(isPlaying)
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying
+  }, [isPlaying])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -42,7 +51,9 @@ export const ParticleTerrain: React.FC = () => {
     window.addEventListener('mousemove', handleMouseMove)
 
     const render = () => {
-      time += 0.015
+      if (isPlayingRef.current) {
+        time += 0.015
+      }
       mouseX += (targetMouseX - mouseX) * 0.05
       mouseY += (targetMouseY - mouseY) * 0.05
 
@@ -105,16 +116,15 @@ export const ParticleTerrain: React.FC = () => {
   }, [])
 
   return (
-    <div className="absolute inset-x-0 bottom-0 top-[15%] pointer-events-none overflow-hidden select-none -z-10">
+    <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
       <canvas 
         ref={canvasRef} 
-        className="w-full h-full opacity-90 transition-opacity duration-1000"
+        className="w-full h-full opacity-95 transition-opacity duration-1000"
       />
-      {/* Subtle bottom gradient to feather into the next section */}
+      {/* Subtle bottom gradient to feather into the scrub bar */}
       <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#08080A] via-[#08080A]/60 to-transparent pointer-events-none" />
       {/* Top subtle vignette */}
-      <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#08080A] via-[#08080A]/40 to-transparent pointer-events-none" />
+      <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-[#08080A]/80 via-[#08080A]/30 to-transparent pointer-events-none" />
     </div>
   )
 }
-

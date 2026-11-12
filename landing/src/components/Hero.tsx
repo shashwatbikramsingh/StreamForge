@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowRight, ChevronRight, Pause, Play, Radio, Layers, BarChart3 } from 'lucide-react'
 import { ParticleTerrain } from './ParticleTerrain'
@@ -10,6 +10,30 @@ interface HeroProps {
 
 export const Hero: React.FC<HeroProps> = ({ onGetStartedClick, onExploreClick }) => {
   const [isPlaying, setIsPlaying] = useState(true)
+  const [elapsedSeconds, setElapsedSeconds] = useState(84)
+  const totalSeconds = 180
+
+  useEffect(() => {
+    if (!isPlaying) return
+    const timer = setInterval(() => {
+      setElapsedSeconds((prev) => (prev >= totalSeconds ? 0 : prev + 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [isPlaying])
+
+  const formatTime = (secs: number) => {
+    const mins = Math.floor(secs / 60)
+    const rem = secs % 60
+    return `${String(mins).padStart(2, '0')}:${String(rem).padStart(2, '0')}`
+  }
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+    setElapsedSeconds(Math.round(ratio * totalSeconds))
+  }
+
+  const progressPct = (elapsedSeconds / totalSeconds) * 100
 
   return (
     <section className="relative w-full pt-8 pb-12 md:pt-14 md:pb-18 overflow-hidden">
@@ -84,14 +108,14 @@ export const Hero: React.FC<HeroProps> = ({ onGetStartedClick, onExploreClick })
           transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
         >
           {/* Live Interactive 3D Canvas */}
-          <ParticleTerrain />
+          <ParticleTerrain isPlaying={isPlaying} />
 
           {/* Bottom Scrub Control Bar matching Dribbble reference */}
-          <div className="absolute bottom-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-t from-[#08080A] via-[#08080A]/75 to-transparent flex items-center justify-between gap-4 text-[11px] text-[#A39E93] z-20">
+          <div className="absolute bottom-0 inset-x-0 p-4 sm:p-6 bg-gradient-to-t from-[#08080A] via-[#08080A]/80 to-transparent flex items-center justify-between gap-4 text-[11px] text-[#A39E93] z-20">
             <div className="flex items-center gap-3">
               <button 
                 onClick={() => setIsPlaying(!isPlaying)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-[#E7D7BE] flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-[#E7D7BE] flex items-center justify-center transition-colors cursor-pointer"
                 aria-label={isPlaying ? "Pause simulation" : "Resume simulation"}
               >
                 {isPlaying ? (
@@ -100,20 +124,36 @@ export const Hero: React.FC<HeroProps> = ({ onGetStartedClick, onExploreClick })
                   <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                 )}
               </button>
-              <div className="w-36 sm:w-72 h-1 rounded-full bg-white/15 overflow-hidden">
-                <motion.div 
-                  className="h-full bg-gradient-to-r from-[#E7D7BE] to-[#EA580C]"
-                  animate={{ width: isPlaying ? ['20%', '85%', '20%'] : '50%' }}
-                  transition={{ repeat: Infinity, duration: 6, ease: 'easeInOut' }}
-                />
+              <div
+                onClick={handleSeek}
+                role="slider"
+                aria-label="Simulation timeline"
+                aria-valuenow={elapsedSeconds}
+                aria-valuemin={0}
+                aria-valuemax={totalSeconds}
+                tabIndex={0}
+                className="w-36 sm:w-72 h-2 flex items-center cursor-pointer group"
+              >
+                <div className="w-full h-1 rounded-full bg-white/15 overflow-hidden group-hover:h-1.5 transition-all">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#E7D7BE] to-[#EA580C] transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
               </div>
-              <span className="font-mono text-[#D4CEBF] text-xs">01:24 / 03:00</span>
+              <span className="font-mono text-[#D4CEBF] text-xs tabular-nums">
+                {formatTime(elapsedSeconds)} / 03:00
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[#D4CEBF] font-mono text-xs hidden sm:inline">LIVE TELEMETRY: KRAFT-PROD-01 · 842 EVT/S · 98.7% HEALTH</span>
-              <span className="text-[#D4CEBF] font-mono text-xs sm:hidden">842 EVT/S · 98.7%</span>
+              <span className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className="text-[#D4CEBF] font-mono text-xs hidden sm:inline">
+                {isPlaying ? 'LIVE TELEMETRY: KRAFT-PROD-01 · 842 EVT/S · 98.7% HEALTH' : 'STREAM PAUSED · KRAFT-PROD-01'}
+              </span>
+              <span className="text-[#D4CEBF] font-mono text-xs sm:hidden">
+                {isPlaying ? '842 EVT/S · 98.7%' : 'PAUSED'}
+              </span>
             </div>
           </div>
         </motion.div>

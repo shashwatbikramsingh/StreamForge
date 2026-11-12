@@ -1,14 +1,42 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import { FileCode, BookOpen, Layers, Check } from 'lucide-react'
+import { FileCode, BookOpen, Layers, Check, ArrowRight } from 'lucide-react'
 import { GithubIcon } from './SocialIcons'
 
-export const DocsAndPricing: React.FC = () => {
+interface DocsAndPricingProps {
+  onGetStarted?: () => void
+}
+
+export const DocsAndPricing: React.FC<DocsAndPricingProps> = ({ onGetStarted }) => {
   const docCards = [
-    { title: 'GitHub', sub: 'Source Code & Issues', icon: GithubIcon, href: 'https://github.com/shashwatbikramsingh/StreamForge' },
-    { title: 'API Docs', sub: 'Endpoints & Schemas', icon: FileCode, href: '#api' },
-    { title: 'Setup Guide', sub: 'Docker & KRaft Cluster', icon: BookOpen, href: '#setup' },
-    { title: 'Architecture', sub: 'ADRs & Technical Decisions', icon: Layers, href: '#architecture' },
+    {
+      title: 'GitHub',
+      sub: 'Source Code & Issues',
+      icon: GithubIcon,
+      href: 'https://github.com/shashwatbikramsingh/StreamForge',
+      external: true,
+    },
+    {
+      title: 'API Docs',
+      sub: 'Endpoints & Schemas',
+      icon: FileCode,
+      href: 'https://github.com/shashwatbikramsingh/StreamForge/blob/main/streamforge_docs/api.md',
+      external: true,
+    },
+    {
+      title: 'Setup Guide',
+      sub: 'Docker & KRaft Cluster',
+      icon: BookOpen,
+      href: 'https://github.com/shashwatbikramsingh/StreamForge#-getting-started',
+      external: true,
+    },
+    {
+      title: 'Architecture',
+      sub: 'ADRs & Technical Decisions',
+      icon: Layers,
+      href: '#architecture',
+      external: false,
+    },
   ]
 
   const pricingTiers = [
@@ -17,6 +45,7 @@ export const DocsAndPricing: React.FC = () => {
       price: 'Free',
       period: '',
       popular: false,
+      cta: 'Deploy Locally',
       features: [
         'Up to 50K events/day',
         'Core pipeline (Kafka + Spark)',
@@ -28,6 +57,7 @@ export const DocsAndPricing: React.FC = () => {
       price: '$29',
       period: '/month',
       popular: true,
+      cta: 'Start Pro Cluster',
       features: [
         'Up to 10M events/day',
         'Real-time streaming analytics',
@@ -39,6 +69,7 @@ export const DocsAndPricing: React.FC = () => {
       price: 'Custom',
       period: '',
       popular: false,
+      cta: 'Contact Sales',
       features: [
         'Unlimited event throughput',
         'High availability & 99.99% SLAs',
@@ -82,8 +113,8 @@ export const DocsAndPricing: React.FC = () => {
                   <a
                     key={i}
                     href={d.href}
-                    target={d.href.startsWith('http') ? '_blank' : undefined}
-                    rel={d.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                    target={d.external ? '_blank' : undefined}
+                    rel={d.external ? 'noopener noreferrer' : undefined}
                     className="bg-white/[0.02] hover:bg-white/[0.06] rounded-2xl p-4 border border-white/[0.06] hover:border-[#E7D7BE]/40 transition-all flex flex-col items-start group shadow-sm"
                   >
                     <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-[#E7D7BE] group-hover:scale-105 mb-2.5 transition-all">
@@ -159,6 +190,20 @@ export const DocsAndPricing: React.FC = () => {
                       ))}
                     </div>
                   </div>
+
+                  {onGetStarted && (
+                    <button
+                      onClick={onGetStarted}
+                      className={`mt-5 w-full py-2 px-3 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        tier.popular
+                          ? 'bg-[#E7D7BE] hover:bg-[#F3E8D6] text-[#08080A]'
+                          : 'bg-white/[0.04] hover:bg-white/[0.09] text-[#F5F3EF] border border-white/10'
+                      }`}
+                    >
+                      {tier.cta}
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

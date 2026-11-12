@@ -189,6 +189,24 @@ export const GetStartedModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
 }
 
 export const ExploreModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
+  const [playingDemo, setPlayingDemo] = useState(false)
+  const [activeStage, setActiveStage] = useState(0)
+
+  const demoStages = [
+    { label: '1. Synthetic Producer', detail: 'Emits JSON envelope keyed by ride_id' },
+    { label: '2. Kafka KRaft Broker', detail: 'Appends offset in topic ride-events [P-02]' },
+    { label: '3. Schema Validator', detail: 'Verifies UUIDv4 & monotonic rank rules' },
+    { label: '4. PostgreSQL Commit', detail: 'ON CONFLICT DO NOTHING idempotent write' },
+  ]
+
+  React.useEffect(() => {
+    if (!playingDemo) return
+    const timer = setInterval(() => {
+      setActiveStage((prev) => (prev + 1) % demoStages.length)
+    }, 1500)
+    return () => clearInterval(timer)
+  }, [playingDemo, demoStages.length])
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -227,20 +245,63 @@ export const ExploreModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
 
             <div className="aspect-video bg-[#08080A] rounded-2xl flex flex-col items-center justify-center text-white p-6 relative overflow-hidden group mb-5 border border-white/10">
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
-              <div className="w-14 h-14 rounded-full bg-[#E7D7BE]/20 border border-[#E7D7BE]/40 backdrop-blur-md flex items-center justify-center cursor-pointer group-hover:scale-110 group-hover:bg-[#E7D7BE] group-hover:text-[#08080A] transition-all text-[#E7D7BE]">
-                <Play className="w-6 h-6 fill-current ml-0.5" />
-              </div>
-              <span className="text-xs text-[#D4CEBF] mt-3 font-medium">Watch: StreamForge 2-Minute Demo</span>
+              {!playingDemo ? (
+                <>
+                  <button
+                    onClick={() => setPlayingDemo(true)}
+                    aria-label="Start interactive pipeline walkthrough"
+                    className="w-14 h-14 rounded-full bg-[#E7D7BE]/20 border border-[#E7D7BE]/40 backdrop-blur-md flex items-center justify-center cursor-pointer group-hover:scale-110 group-hover:bg-[#E7D7BE] group-hover:text-[#08080A] transition-all text-[#E7D7BE] z-10"
+                  >
+                    <Play className="w-6 h-6 fill-current ml-0.5" />
+                  </button>
+                  <span className="text-xs text-[#D4CEBF] mt-3 font-medium z-10">Launch Live Pipeline Simulation</span>
+                </>
+              ) : (
+                <div className="w-full h-full flex flex-col justify-between z-10">
+                  <div className="flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-emerald-400 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      SIMULATION RUNNING
+                    </span>
+                    <button
+                      onClick={() => setPlayingDemo(false)}
+                      className="text-[#A39E93] hover:text-white underline cursor-pointer"
+                    >
+                      Stop
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5 my-auto">
+                    {demoStages.map((st, idx) => (
+                      <div
+                        key={st.label}
+                        className={`p-3 rounded-xl border transition-all ${
+                          activeStage === idx
+                            ? 'bg-[#E7D7BE]/10 border-[#E7D7BE] shadow-[0_0_15px_rgba(231,215,190,0.15)]'
+                            : 'bg-white/[0.02] border-white/10 opacity-60'
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-white mb-0.5">{st.label}</div>
+                        <div className="text-[10px] text-[#A39E93]">{st.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="text-[10px] font-mono text-[#E7D7BE] text-center">
+                    Trace ID: 98f2-4a11-b8c0 · End-to-End Ingestion Latency: 14.2ms
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="text-xs text-[#A39E93] leading-relaxed mb-6">
-              Learn how StreamForge handles out-of-order synthetic events, enforces monotonic ride state transitions, commits Kafka offsets safely, and powers real-time Streamlit analytics without data loss.
+              Learn how StreamForge handles out-of-order synthetic events, enforces monotonic ride state transitions, commits Kafka offsets safely, and powers real-time analytics without data loss.
             </div>
 
             <div className="flex justify-end">
               <button
                 onClick={onClose}
-                className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-white border border-white/15 rounded-full text-xs font-semibold uppercase tracking-wider transition-all"
+                className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-white border border-white/15 rounded-full text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer"
               >
                 Close Walkthrough
               </button>

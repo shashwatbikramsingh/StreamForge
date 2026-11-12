@@ -64,7 +64,9 @@ export function App() {
         <UseCasesAndReliability />
 
         {/* 10. Developer Friendly Docs & Transparent Pricing Tiers */}
-        <DocsAndPricing />
+        <DocsAndPricing 
+          onGetStarted={() => setGetStartedModalOpen(true)}
+        />
 
         {/* 11. Pre-Footer Dark CTA Banner */}
         <CtaBanner 
