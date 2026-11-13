@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, Menu, X } from 'lucide-react'
 import { GithubIcon } from './SocialIcons'
@@ -10,18 +10,56 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClick }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [activeSection, setActiveSection] = useState<string>('')
+  const [isScrolled, setIsScrolled] = useState(false)
 
   const navLinks = [
-    { label: 'PLATFORM', href: '#product' },
-    { label: 'FEATURES', href: '#features' },
-    { label: 'ARCHITECTURE', href: '#architecture' },
-    { label: 'USE CASES', href: '#use-cases' },
-    { label: 'DOCS', href: '#docs' },
-    { label: 'PRICING', href: '#pricing' },
+    { label: 'PLATFORM', href: '#product', id: 'product' },
+    { label: 'FEATURES', href: '#features', id: 'features' },
+    { label: 'ARCHITECTURE', href: '#architecture', id: 'architecture' },
+    { label: 'USE CASES', href: '#use-cases', id: 'use-cases' },
+    { label: 'DOCS', href: '#docs', id: 'docs' },
+    { label: 'PRICING', href: '#pricing', id: 'pricing' },
   ]
 
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20)
+
+      // Active section detection
+      const scrollPosition = window.scrollY + 140
+      const sectionElements = navLinks.map((link) => ({
+        id: link.id,
+        el: document.getElementById(link.id),
+      }))
+
+      for (let i = sectionElements.length - 1; i >= 0; i--) {
+        const item = sectionElements[i]
+        if (item.el) {
+          const top = item.el.offsetTop
+          if (scrollPosition >= top) {
+            setActiveSection(item.id)
+            return
+          }
+        }
+      }
+
+      if (window.scrollY < 200) {
+        setActiveSection('')
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
   return (
-    <header className="sticky top-0 z-50 w-full px-4 sm:px-6 lg:px-8 py-3.5 bg-[#08080A]/85 backdrop-blur-xl border-b border-white/[0.08] transition-all">
+    <header className={`sticky top-0 z-50 w-full px-4 sm:px-6 lg:px-8 py-3.5 transition-all duration-200 ${
+      isScrolled 
+        ? 'bg-[#08080A]/90 backdrop-blur-xl border-b border-white/[0.1] shadow-[0_4px_24px_rgba(0,0,0,0.5)]' 
+        : 'bg-[#08080A]/75 backdrop-blur-md border-b border-white/[0.06]'
+    }`}>
       <nav className="max-w-7xl mx-auto flex items-center justify-between">
         
         {/* Left: Brand Logo matching the Dribbble shot's luxury concentric spiral mark */}
@@ -41,17 +79,29 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
           </span>
         </a>
 
-        {/* Center: Desktop Nav Links (tracked, uppercase, elegant) */}
+        {/* Center: Desktop Nav Links with Active Scrollspy Highlighting */}
         <div className="hidden md:flex items-center gap-6 lg:gap-8">
-          {navLinks.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              className="text-[11.5px] font-semibold tracking-widest text-[#A39E93] hover:text-[#F5F3EF] transition-colors"
-            >
-              {link.label}
-            </a>
-          ))}
+          {navLinks.map((link) => {
+            const isActive = activeSection === link.id
+            return (
+              <a
+                key={link.label}
+                href={link.href}
+                className={`relative py-1 text-[11.5px] font-semibold tracking-widest transition-colors ${
+                  isActive ? 'text-[#E7D7BE]' : 'text-[#A39E93] hover:text-[#F5F3EF]'
+                }`}
+              >
+                <span>{link.label}</span>
+                {isActive && (
+                  <motion.span 
+                    layoutId="activeNavIndicator"
+                    className="absolute -bottom-1 left-0 right-0 h-0.5 bg-[#E7D7BE] rounded-full shadow-[0_0_8px_rgba(231,215,190,0.8)]"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+              </a>
+            )
+          })}
         </div>
 
         {/* Right: Actions matching the Dribbble shot */}
@@ -115,16 +165,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
             exit={{ opacity: 0, height: 0 }}
             className="md:hidden mt-3 pt-3 border-t border-white/10 flex flex-col gap-3 pb-2"
           >
-            {navLinks.map((link) => (
-              <a
-                key={link.label}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="text-xs font-semibold tracking-wider text-[#A39E93] hover:text-[#E7D7BE] py-1 transition-colors"
-              >
-                {link.label}
-              </a>
-            ))}
+            {navLinks.map((link) => {
+              const isActive = activeSection === link.id
+              return (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`text-xs font-semibold tracking-wider py-1.5 transition-colors flex items-center justify-between ${
+                    isActive ? 'text-[#E7D7BE] font-bold' : 'text-[#A39E93] hover:text-[#E7D7BE]'
+                  }`}
+                >
+                  <span>{link.label}</span>
+                  {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />}
+                </a>
+              )
+            })}
             <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
               <button
                 onClick={() => {
