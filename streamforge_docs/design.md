@@ -57,3 +57,11 @@
 - **Physics Curves:** `framer-motion` ease-out spring curves (`ease: [0.16, 1, 0.3, 1]`).
 - **Live Event Feed:** Continuous synthetic stream simulation updating at ~2.8s intervals with realistic latency and partition assignments.
 - **WCAG Compliance:** Contrast ratios strictly exceed 4.5:1 across all copy and modal interfaces.
+
+## 6. Visual Reference Alignments (November 2026)
+
+- **Floating Capsule Navbar:** Centered `max-w-5xl mx-auto rounded-full bg-[#12121A]/80 border border-white/10` with StreamForge 3D isometric hexagon, desktop links, and `Get Started ↗` CTA.
+- **Hero & Showcase Zero-Gap Clusters:** Both the Hero and Dashboard device showcases utilize centered `max-w-4xl mx-auto flex items-center justify-center gap-0` compositions with dedicated `w-12` dotted bridge connector SVGs and animated traveling signal particles, eliminating lateral void gaps.
+- **2x2 Features Grid:** Exact high-fidelity glassmorphism grid with diagonal warm amber flare (Visibility Metrics), cool blue aura (Competitor Analysis table + rating), electric blue nebula beam (Investor Signals), and dual-horizon glow with interactive AI prompt bar and reasoning dropdown (Prompt Intelligence).
+- **Streaming Pipeline Studio:** Full-width interactive architecture canvas featuring the official `OpenAI` inference bridge, bidirectional vector telemetry arrows (`Generate AI insights ↓` and `↑ Predicted car prices`), native Python transformation sandbox with `.py` badge and floating 3D geometric shapes, and `Notify` delivery stream to Web App & Dashboard sinks.
+
