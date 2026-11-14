@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, Menu, X } from 'lucide-react'
-import { GithubIcon } from './SocialIcons'
+import { ArrowUpRight, Menu, X } from 'lucide-react'
+import { GithubIcon, StreamForgeHexagonLogo } from './SocialIcons'
 
 interface NavbarProps {
   onGetStartedClick: () => void
@@ -14,19 +14,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
   const [isScrolled, setIsScrolled] = useState(false)
 
   const navLinks = [
-    { label: 'PLATFORM', href: '#product', id: 'product' },
-    { label: 'FEATURES', href: '#features', id: 'features' },
-    { label: 'ARCHITECTURE', href: '#architecture', id: 'architecture' },
-    { label: 'USE CASES', href: '#use-cases', id: 'use-cases' },
-    { label: 'DOCS', href: '#docs', id: 'docs' },
-    { label: 'PRICING', href: '#pricing', id: 'pricing' },
+    { label: 'Features', href: '#features', id: 'features' },
+    { label: 'Architecture', href: '#architecture', id: 'architecture' },
+    { label: 'Use Cases', href: '#use-cases', id: 'use-cases' },
   ]
 
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20)
 
-      // Active section detection
       const scrollPosition = window.scrollY + 140
       const sectionElements = navLinks.map((link) => ({
         id: link.id,
@@ -62,40 +58,33 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
     }`}>
       <nav className="max-w-7xl mx-auto flex items-center justify-between">
         
-        {/* Left: Brand Logo matching the Dribbble shot's luxury concentric spiral mark */}
-        <a href="#" className="flex items-center gap-3 group">
-          <div className="relative w-7 h-7 flex items-center justify-center">
-            {/* Concentric rings */}
-            <span className="absolute inset-0 rounded-full border border-[#E7D7BE]/40 group-hover:border-[#E7D7BE] transition-colors" />
-            <span className="absolute inset-1 rounded-full border border-[#E7D7BE]/70 group-hover:scale-105 transition-transform" />
-            <motion.span 
-              className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]"
-              animate={{ scale: [1, 1.3, 1] }}
-              transition={{ repeat: Infinity, duration: 2.4, ease: 'easeInOut' }}
-            />
+        {/* Left: Brand Logo matching the screenshot's 3D isometric orange hexagon */}
+        <a href="#" className="flex items-center gap-2.5 group">
+          <div className="relative w-7 h-7 flex items-center justify-center transition-transform group-hover:scale-105">
+            <StreamForgeHexagonLogo className="w-6 h-6" />
           </div>
-          <span className="text-[17px] font-bold tracking-tight text-[#F5F3EF] group-hover:text-[#E7D7BE] transition-colors">
+          <span className="text-[17px] font-bold tracking-tight text-[#F5F3EF] group-hover:text-white transition-colors">
             StreamForge
           </span>
         </a>
 
-        {/* Center: Desktop Nav Links with Active Scrollspy Highlighting */}
-        <div className="hidden md:flex items-center gap-6 lg:gap-8">
+        {/* Center: Desktop Nav Links (Features, Architecture, Use Cases) */}
+        <div className="hidden md:flex items-center gap-7 lg:gap-9">
           {navLinks.map((link) => {
             const isActive = activeSection === link.id
             return (
               <a
                 key={link.label}
                 href={link.href}
-                className={`relative py-1 text-[11.5px] font-semibold tracking-widest transition-colors ${
-                  isActive ? 'text-[#E7D7BE]' : 'text-[#A39E93] hover:text-[#F5F3EF]'
+                className={`relative py-1 text-[13px] font-medium transition-colors ${
+                  isActive ? 'text-white font-semibold' : 'text-[#A39E93] hover:text-[#F5F3EF]'
                 }`}
               >
                 <span>{link.label}</span>
                 {isActive && (
                   <motion.span 
                     layoutId="activeNavIndicator"
-                    className="absolute -bottom-1 left-0 right-0 h-0.5 bg-[#E7D7BE] rounded-full shadow-[0_0_8px_rgba(231,215,190,0.8)]"
+                    className="absolute -bottom-1 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-400 to-amber-300 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.6)]"
                     transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                   />
                 )}
@@ -104,7 +93,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
           })}
         </div>
 
-        {/* Right: Actions matching the Dribbble shot */}
+        {/* Right: Actions matching the screenshot */}
         <div className="hidden md:flex items-center gap-3">
           <a
             href="https://github.com/shashwatbikramsingh/StreamForge"
@@ -117,21 +106,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
             <GithubIcon className="w-4 h-4" />
           </a>
           
-          {/* Outline Button: VIEW DEMO */}
-          <button
-            onClick={onExploreClick}
-            className="px-5 py-2 text-[11px] font-bold tracking-wider text-[#E4DFD5] bg-white/[0.03] hover:bg-white/[0.08] border border-white/15 rounded-full transition-all uppercase shadow-2xs hover:border-white/30 active:scale-[0.98]"
-          >
-            VIEW DEMO
-          </button>
-
-          {/* Champagne Solid Button: REQUEST A DIAGNOSTIC / GET STARTED */}
+          {/* Get Started Pill Button with ArrowUpRight */}
           <button
             onClick={onGetStartedClick}
-            className="px-5 py-2 text-[11px] font-bold tracking-wider text-[#08080A] bg-[#E7D7BE] hover:bg-[#F3E8D6] rounded-full flex items-center gap-1.5 transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98] uppercase"
+            className="px-5 py-2 text-xs font-semibold text-[#F5F3EF] bg-white/[0.04] hover:bg-white/[0.09] border border-white/15 rounded-full flex items-center gap-1.5 transition-all shadow-sm hover:scale-[1.02] active:scale-[0.98]"
           >
-            GET STARTED
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span>Get Started</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-white/80" />
           </button>
         </div>
 
@@ -172,12 +153,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
                   key={link.label}
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`text-xs font-semibold tracking-wider py-1.5 transition-colors flex items-center justify-between ${
-                    isActive ? 'text-[#E7D7BE] font-bold' : 'text-[#A39E93] hover:text-[#E7D7BE]'
+                  className={`text-sm font-medium py-1.5 transition-colors flex items-center justify-between ${
+                    isActive ? 'text-white font-semibold' : 'text-[#A39E93] hover:text-white'
                   }`}
                 >
                   <span>{link.label}</span>
-                  {isActive && <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />}
+                  {isActive && <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />}
                 </a>
               )
             })}
@@ -187,19 +168,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
                   setMobileMenuOpen(false)
                   onExploreClick()
                 }}
-                className="w-full py-2.5 rounded-full border border-white/20 text-[#E4DFD5] text-xs font-bold tracking-wider uppercase"
+                className="w-full py-2.5 rounded-full border border-white/20 text-[#E4DFD5] text-xs font-semibold"
               >
-                VIEW DEMO
+                Try Live Demo
               </button>
               <button
                 onClick={() => {
                   setMobileMenuOpen(false)
                   onGetStartedClick()
                 }}
-                className="w-full py-2.5 rounded-full bg-[#E7D7BE] text-[#08080A] text-xs font-bold tracking-wider uppercase flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 rounded-full bg-white text-black text-xs font-bold flex items-center justify-center gap-1.5"
               >
-                GET STARTED
-                <ArrowRight className="w-3.5 h-3.5" />
+                Get Started
+                <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </motion.div>

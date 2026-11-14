@@ -18,3 +18,40 @@ export const XTwitterIcon: React.FC<{ className?: string }> = ({ className = 'w-
   </svg>
 )
 
+export const StreamForgeHexagonLogo: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
+  <svg className={className} viewBox="0 0 48 48" fill="none">
+    {/* Isometric 3D Hexagon from the design mockup */}
+    <path d="M24 4 L42 14.5 L24 25 L6 14.5 Z" fill="#FB923C" />
+    <path d="M42 14.5 L42 34.5 L24 45 L24 25 Z" fill="#C2410C" />
+    <path d="M6 14.5 L24 25 L24 45 L6 34.5 Z" fill="#EA580C" />
+    {/* Inner faceted cut-out */}
+    <path d="M24 15 L32 19.8 L24 24.6 L16 19.8 Z" fill="#08080A" opacity="0.9" />
+    <path d="M32 19.8 L32 28.5 L24 33.3 L24 24.6 Z" fill="#0E0E14" opacity="0.8" />
+    <path d="M16 19.8 L24 24.6 L24 33.3 L16 28.5 Z" fill="#14141A" opacity="0.85" />
+  </svg>
+)
+
+export const KafkaLogo: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 100 100" fill="currentColor">
+    <circle cx="26" cy="50" r="11" fill="currentColor" />
+    <circle cx="74" cy="24" r="9" fill="currentColor" />
+    <circle cx="74" cy="76" r="9" fill="currentColor" />
+    <path d="M26 50 L74 24" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+    <path d="M26 50 L74 76" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+  </svg>
+)
+
+export const PostgresLogo: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <ellipse cx="12" cy="5" rx="9" ry="3" />
+    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+    <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
+  </svg>
+)
+
+export const DockerLogo: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M13.98 11.08h2.04v2.04h-2.04zm-2.55 0h2.04v2.04h-2.04zm-2.55 0h2.04v2.04H8.88zm-2.55 0h2.04v2.04H6.33zm5.1-2.55h2.04v2.04h-2.04zm-2.55 0h2.04v2.04H8.88zm-2.55 0h2.04v2.04H6.33zm5.1-2.55h2.04v2.04h-2.04zm-2.55 0h2.04v2.04H8.88zM22.5 13.5c-.38-.28-1.54-.36-2.39.24-.13-1.02-.77-1.92-1.72-2.32l-.44-.19-.3.37c-.63.78-.96 1.77-.96 2.78 0 .43.06.86.19 1.28H1.5c-.28 0-.5.22-.5.5 0 2.22.9 4.3 2.5 5.8 1.55 1.45 3.63 2.25 5.8 2.25 6.06 0 11.16-4.5 12.06-10.5.56-.05 1.14-.14 1.64-.42l.5-.29-.5-.4z"/>
+  </svg>
+)
+

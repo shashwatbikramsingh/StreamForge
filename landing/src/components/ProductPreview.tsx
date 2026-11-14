@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  ArrowRight, Activity, Search, Copy, Check, 
+  Activity, Search, Copy, Check, 
   Pause, Play, PlusCircle, ChevronDown, ChevronUp, 
-  Code2, Filter, AlertOctagon, X
+  Code2, Filter, AlertOctagon, X, BarChart2, Layers, ArrowUpRight
 } from 'lucide-react'
-import { DashboardMockup } from './DashboardMockup'
+import { StreamForgeHexagonLogo } from './SocialIcons'
 
 interface StreamEvent {
   id: string
@@ -29,6 +29,13 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
   const [searchQuery, setSearchQuery] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null)
+
+  // Live fluctuating metrics for the showcase
+  const [throughput, setThroughput] = useState(12840)
+  const [activeRides, setActiveRides] = useState(2318)
+  const [avgLatency, setAvgLatency] = useState(320)
+  const [signalTick, setSignalTick] = useState(0)
+  const [selectedMetric, setSelectedMetric] = useState<'throughput' | 'rides' | 'latency'>('throughput')
 
   const [events, setEvents] = useState<StreamEvent[]>([
     { 
@@ -79,7 +86,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
       partition: 'P-02', 
       latency: '4.0ms',
       dedupHash: '0x55aa...1122',
-      payload: { ride_id: 'rd_7721', start_time: '2026-11-13T10:59:15Z', vehicle_fleet_id: 'v_901' }
+      payload: { ride_id: 'rd_7721', start_time: '2026-11-14T10:59:15Z', vehicle_fleet_id: 'v_901' }
     },
     { 
       id: 'EVT-94286', 
@@ -113,7 +120,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
     }
   ])
 
-  // Helper to generate a realistic synthetic event
+  // Helper to generate realistic synthetic events
   const createSyntheticEvent = (forcedType?: string, forcedFailed?: boolean): StreamEvent => {
     const types = ['ride_booked', 'payment', 'ride_completed', 'user_login', 'ride_started']
     const type = forcedType || types[Math.floor(Math.random() * types.length)]
@@ -185,6 +192,18 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
     }, 2000)
   }
 
+  // Real-time metrics tick and pulse animation
+  useEffect(() => {
+    if (isPaused) return
+    const interval = setInterval(() => {
+      setThroughput(Math.floor(12700 + Math.random() * 400))
+      setActiveRides(Math.floor(2300 + Math.random() * 40))
+      setAvgLatency(Math.floor(310 + Math.random() * 25))
+      setSignalTick((prev) => prev + 1)
+    }, 2500)
+    return () => clearInterval(interval)
+  }, [isPaused])
+
   // WebSocket & Polling setup
   useEffect(() => {
     let isMounted = true
@@ -192,13 +211,10 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
     const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
     const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/events'
 
-    // 1. Attempt WebSocket connection
     try {
       ws = new WebSocket(wsUrl)
       ws.onopen = () => {
-        if (isMounted) {
-          setConnectionMode('websocket')
-        }
+        if (isMounted) setConnectionMode('websocket')
       }
       ws.onmessage = (msgEvent) => {
         if (!isMounted || isPaused) return
@@ -218,29 +234,23 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
             setEvents((prev) => [formatted, ...prev.slice(0, 11)])
           }
         } catch {
-          // ignore parse errors
+          // ignore
         }
       }
       ws.onerror = () => {
-        if (isMounted && connectionMode === 'websocket') {
-          setConnectionMode('simulated')
-        }
+        if (isMounted) setConnectionMode('simulated')
       }
       ws.onclose = () => {
-        if (isMounted && connectionMode === 'websocket') {
-          setConnectionMode('simulated')
-        }
+        if (isMounted) setConnectionMode('simulated')
       }
     } catch {
-      // WebSocket initialization failure
+      // WS failover
     }
 
-    // 2. Fallback polling & local event generator loop
     const fallbackInterval = setInterval(async () => {
       if (!isMounted || isPaused) return
-      if (ws && ws.readyState === WebSocket.OPEN) return // WebSocket is healthy
+      if (ws && ws.readyState === WebSocket.OPEN) return
 
-      // Try REST
       try {
         const res = await fetch(`${apiUrl}/api/v1/events/recent?limit=8`, { signal: AbortSignal.timeout(1800) })
         if (res.ok) {
@@ -261,10 +271,9 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
           }
         }
       } catch {
-        // Backend offline, fallback to simulation
+        // simulation
       }
 
-      // Pure client-side simulation fallback
       setConnectionMode('simulated')
       const newEvt = createSyntheticEvent()
       setEvents((prev) => [newEvt, ...prev.slice(0, 11)])
@@ -272,17 +281,14 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
 
     return () => {
       isMounted = false
-      if (ws) {
-        ws.close()
-      }
+      if (ws) ws.close()
       clearInterval(fallbackInterval)
     }
   }, [isPaused])
 
-  // Filtered events calculation
+  // Filtered events
   const filteredEvents = useMemo(() => {
     return events.filter((evt) => {
-      // Category match
       let matchesCat = true
       if (filterCategory === 'ride') {
         matchesCat = evt.type.includes('ride')
@@ -295,8 +301,6 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
       }
 
       if (!matchesCat) return false
-
-      // Search match
       if (!searchQuery.trim()) return true
       const q = searchQuery.toLowerCase().trim()
       return (
@@ -308,7 +312,6 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
     })
   }, [events, filterCategory, searchQuery])
 
-  // Counts for pills
   const counts = useMemo(() => {
     return {
       all: events.length,
@@ -320,58 +323,315 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
   }, [events])
 
   return (
-    <section id="product" className="w-full py-12 md:py-20 scroll-mt-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="product" className="w-full py-16 md:py-24 scroll-mt-12 bg-[#08080A] relative overflow-hidden">
+      
+      {/* Background Radial Amber Sunset Aura matching the uploaded screenshot */}
+      <div 
+        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] sm:w-[900px] md:w-[1100px] h-[600px] sm:h-[800px] rounded-full blur-[140px] opacity-35 md:opacity-50"
+        style={{
+          background: 'radial-gradient(circle, rgba(234, 88, 12, 0.40) 0%, rgba(249, 115, 22, 0.18) 40%, rgba(8, 8, 10, 0) 75%)'
+        }}
+      />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* Section Heading */}
-        <div className="text-center max-w-3xl mx-auto mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[#D4CEBF] text-[10px] font-bold tracking-widest uppercase mb-3.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#E7D7BE]" />
-            <span>PLATFORM TELEMETRY</span>
+        {/* Section Heading matching the screenshot */}
+        <div className="text-left max-w-3xl mb-12 md:mb-16">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[#D4CEBF] text-[10.5px] font-bold tracking-widest uppercase mb-4 backdrop-blur-md">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+            <span>DASHBOARD</span>
           </div>
 
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#F5F3EF] tracking-tight mb-4">
-            Explore the Platform
+          <h2 className="text-3xl sm:text-5xl md:text-6xl font-extrabold text-[#F5F3EF] tracking-tight leading-[1.08] mb-4">
+            Real-time insights,<br />
+            from live data.
           </h2>
 
-          <p className="text-sm sm:text-base text-[#A39E93] leading-relaxed max-w-2xl mx-auto mb-6">
-            A powerful, real-time dashboard to monitor events, pipeline health, and business metrics across your streaming architecture.
+          <p className="text-sm sm:text-base text-[#A39E93] leading-relaxed max-w-xl">
+            A live analytics dashboard to monitor events, trends and key metrics as they happen.
           </p>
-
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={onViewDashboard}
-              className="px-6 py-2.5 rounded-full bg-[#E7D7BE] hover:bg-[#F3E8D6] text-[#08080A] font-bold text-xs uppercase flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
-            >
-              View Full Dashboard
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
 
-        {/* Dashboard Mockup Console */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="w-full mb-8"
-        >
-          <DashboardMockup />
-        </motion.div>
+        {/* ============================================================== */}
+        {/* CENTERPIECE DEVICE & TELEMETRY SHOWCASE MATCHING THE SCREENSHOT */}
+        {/* ============================================================== */}
+        <div className="relative w-full flex items-center justify-center my-6 md:my-10">
+          
+          <div className="relative w-full max-w-[1100px] flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-4">
+            
+            {/* LEFT COLUMN: 3 Large Metric Cards */}
+            <div className="w-full lg:w-[260px] flex lg:flex-col items-center lg:items-end justify-center gap-3 sm:gap-4 z-20">
+              
+              {/* Card 1: Event Throughput */}
+              <motion.div
+                whileHover={{ scale: 1.03, x: 2 }}
+                onClick={() => setSelectedMetric('throughput')}
+                className={`cursor-pointer w-full max-w-[220px] p-4 sm:p-5 rounded-2xl border transition-all text-left ${
+                  selectedMetric === 'throughput'
+                    ? 'bg-[#181824] border-orange-500/60 shadow-[0_0_20px_rgba(234,88,12,0.25)] ring-1 ring-orange-500/30'
+                    : 'bg-[#0E0E14]/80 hover:bg-[#14141E] border-white/[0.08] shadow-md'
+                }`}
+              >
+                <div className="text-xl sm:text-2xl font-bold font-mono text-white mb-0.5">
+                  {throughput.toLocaleString()} <span className="text-sm font-normal text-[#A39E93]">/sec</span>
+                </div>
+                <div className="text-xs text-[#A39E93] font-medium">
+                  Event Throughput
+                </div>
+              </motion.div>
 
-        {/* Live Recent Events Stream Card */}
+              {/* Card 2: Active Rides */}
+              <motion.div
+                whileHover={{ scale: 1.03, x: 2 }}
+                onClick={() => setSelectedMetric('rides')}
+                className={`cursor-pointer w-full max-w-[220px] p-4 sm:p-5 rounded-2xl border transition-all text-left ${
+                  selectedMetric === 'rides'
+                    ? 'bg-[#181824] border-orange-500/60 shadow-[0_0_20px_rgba(234,88,12,0.25)] ring-1 ring-orange-500/30'
+                    : 'bg-[#0E0E14]/80 hover:bg-[#14141E] border-white/[0.08] shadow-md'
+                }`}
+              >
+                <div className="text-xl sm:text-2xl font-bold font-mono text-white mb-0.5">
+                  {activeRides.toLocaleString()}
+                </div>
+                <div className="text-xs text-[#A39E93] font-medium">
+                  Active Rides
+                </div>
+              </motion.div>
+
+              {/* Card 3: Avg. Latency */}
+              <motion.div
+                whileHover={{ scale: 1.03, x: 2 }}
+                onClick={() => setSelectedMetric('latency')}
+                className={`cursor-pointer w-full max-w-[220px] p-4 sm:p-5 rounded-2xl border transition-all text-left ${
+                  selectedMetric === 'latency'
+                    ? 'bg-[#181824] border-orange-500/60 shadow-[0_0_20px_rgba(234,88,12,0.25)] ring-1 ring-orange-500/30'
+                    : 'bg-[#0E0E14]/80 hover:bg-[#14141E] border-white/[0.08] shadow-md'
+                }`}
+              >
+                <div className="text-xl sm:text-2xl font-bold font-mono text-white mb-0.5">
+                  ~{avgLatency} <span className="text-sm font-normal text-[#A39E93]">ms</span>
+                </div>
+                <div className="text-xs text-[#A39E93] font-medium">
+                  Avg. Latency
+                </div>
+              </motion.div>
+
+            </div>
+
+            {/* SVG Connecting Tracks (Desktop) */}
+            <div className="hidden lg:block absolute inset-0 pointer-events-none z-10">
+              <svg className="w-full h-full" viewBox="0 0 1100 580" fill="none">
+                {/* Connectors from Left Metric Cards into Phone */}
+                <path
+                  d="M 250 170 H 350"
+                  stroke="rgba(255, 255, 255, 0.16)"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                />
+                <path
+                  d="M 250 290 H 330"
+                  stroke="rgba(255, 255, 255, 0.16)"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                />
+                <path
+                  d="M 250 410 H 350"
+                  stroke="rgba(255, 255, 255, 0.16)"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                />
+
+                {/* Animated signal dot */}
+                <motion.circle
+                  r="3.5"
+                  fill="#F97316"
+                  key={`pulse-dash-left-${signalTick}`}
+                  animate={{
+                    cx: [250, 350],
+                    cy: [290, 290],
+                    opacity: [0, 1, 0]
+                  }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                />
+
+                {/* Connector from Bottom Card to Right Badges */}
+                <path
+                  d="M 720 400 H 830"
+                  stroke="rgba(255, 255, 255, 0.16)"
+                  strokeWidth="1.5"
+                  strokeDasharray="4 4"
+                />
+                <motion.circle
+                  r="3.5"
+                  fill="#10B981"
+                  key={`pulse-dash-right-${signalTick}`}
+                  animate={{
+                    cx: [720, 830],
+                    cy: [400, 400],
+                    opacity: [0, 1, 0]
+                  }}
+                  transition={{ duration: 1.6, delay: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+                />
+              </svg>
+            </div>
+
+            {/* CENTER COLUMN: Phone Glass Enclosure with 3 Live Notification Cards */}
+            <div className="relative w-full max-w-[370px] sm:max-w-[400px] h-[540px] sm:h-[580px] rounded-[44px] sm:rounded-[48px] bg-[#0E0E14]/85 backdrop-blur-2xl border border-white/[0.12] shadow-[0_30px_70px_rgba(0,0,0,0.9),0_0_40px_rgba(249,115,22,0.14)] p-4 sm:p-5 flex flex-col justify-between z-20">
+              
+              {/* Dynamic Island / Top Speaker Notch */}
+              <div className="text-center pt-1 z-30">
+                <div className="w-24 h-4 rounded-full bg-[#1A1A24] border border-white/10 mx-auto mb-2 flex items-center justify-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-black/90 border border-white/20" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                </div>
+                <div className="text-xs font-bold text-white tracking-wide">
+                  StreamForge
+                </div>
+                <div className="text-[10px] text-[#A39E93] font-mono">
+                  Live Analytics
+                </div>
+              </div>
+
+              {/* Central Guideline */}
+              <div className="absolute top-20 bottom-16 left-1/2 -translate-x-1/2 w-0 border-l border-dashed border-white/10 pointer-events-none z-0" />
+
+              {/* 3 FLOATING NOTIFICATION CARDS (Exact match to screenshot) */}
+              <div className="relative flex-1 my-4 flex flex-col justify-around z-20">
+                
+                {/* Notification Card 1: StreamForge 10:24 */}
+                <motion.div
+                  animate={{ y: [-3, 3, -3] }}
+                  transition={{ repeat: Infinity, duration: 5.2, ease: 'easeInOut' }}
+                  whileHover={{ scale: 1.03 }}
+                  className="relative sm:-left-6 w-[90%] sm:w-[86%] bg-[#181822]/90 backdrop-blur-xl rounded-2xl p-3.5 sm:p-4 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <StreamForgeHexagonLogo className="w-4 h-4" />
+                      <span className="text-xs font-bold text-white">StreamForge</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#A39E93]">10:24</span>
+                  </div>
+                  <p className="text-xs text-[#D4CEBF] font-medium leading-relaxed">
+                    Processing ride events in real time...
+                  </p>
+                </motion.div>
+
+                {/* Notification Card 2: Pipeline 10:25 */}
+                <motion.div
+                  animate={{ y: [3, -3, 3] }}
+                  transition={{ repeat: Infinity, duration: 5.8, ease: 'easeInOut', delay: 0.5 }}
+                  whileHover={{ scale: 1.03 }}
+                  className="relative self-end sm:-right-6 w-[90%] sm:w-[86%] bg-[#181822]/90 backdrop-blur-xl rounded-2xl p-3.5 sm:p-4 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">Pipeline</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#A39E93]">10:25</span>
+                  </div>
+                  <p className="text-xs text-[#D4CEBF] font-medium leading-relaxed">
+                    <span className="font-mono text-white font-bold">{throughput.toLocaleString()}</span> events/sec · <span className="font-mono text-white font-bold">{activeRides.toLocaleString()}</span> active rides
+                  </p>
+                </motion.div>
+
+                {/* Notification Card 3: Analytics 10:26 */}
+                <motion.div
+                  animate={{ y: [-3, 3, -3] }}
+                  transition={{ repeat: Infinity, duration: 6, ease: 'easeInOut', delay: 1 }}
+                  whileHover={{ scale: 1.03 }}
+                  className="relative sm:-left-4 w-[90%] sm:w-[86%] bg-[#181822]/90 backdrop-blur-xl rounded-2xl p-3.5 sm:p-4 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <StreamForgeHexagonLogo className="w-4 h-4" />
+                      <span className="text-xs font-bold text-white">Analytics</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[#A39E93]">10:26</span>
+                  </div>
+                  <p className="text-xs text-[#D4CEBF] font-medium leading-relaxed">
+                    Dashboard updated with latest insights.
+                  </p>
+                </motion.div>
+
+              </div>
+
+              {/* Bottom Phone Bar */}
+              <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] z-30">
+                <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#D4CEBF]">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>STREAMING SYNC</span>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400">
+                  99.99% Availability
+                </span>
+              </div>
+
+            </div>
+
+            {/* RIGHT COLUMN: 3 Pill Badges (Live, Events, Analytics) */}
+            <div className="w-full lg:w-[260px] flex lg:flex-col items-center lg:items-start justify-center gap-3 z-20">
+              
+              {/* Badge 1: Live */}
+              <div 
+                onClick={() => setIsPaused(!isPaused)}
+                className="cursor-pointer px-4 py-2 rounded-full bg-[#14141E] hover:bg-[#1A1A28] border border-white/10 flex items-center gap-2 transition-all shadow-md"
+              >
+                <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`} />
+                <span className="text-xs font-bold text-white">
+                  {isPaused ? 'Paused' : 'Live'}
+                </span>
+              </div>
+
+              {/* Badges 2 & 3 in a neat row */}
+              <div className="flex items-center gap-2.5">
+                {/* Badge 2: Events */}
+                <div className="cursor-pointer px-4 py-2 rounded-2xl bg-[#14141E] hover:bg-[#1A1A28] border border-white/10 flex items-center gap-2 transition-all shadow-md">
+                  <BarChart2 className="w-3.5 h-3.5 text-white/80" />
+                  <span className="text-xs font-semibold text-white">Events</span>
+                </div>
+
+                {/* Badge 3: Analytics */}
+                <div 
+                  onClick={onViewDashboard}
+                  className="cursor-pointer px-4 py-2 rounded-2xl bg-[#14141E] hover:bg-[#1A1A28] border border-white/10 flex items-center gap-2 transition-all shadow-md group"
+                >
+                  <Layers className="w-3.5 h-3.5 text-white/80 group-hover:text-orange-400 transition-colors" />
+                  <span className="text-xs font-semibold text-white">Analytics</span>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* View Full Dashboard Modal CTA Button */}
+        <div className="flex items-center justify-center my-8">
+          <button
+            onClick={onViewDashboard}
+            className="px-6 py-2.5 rounded-full bg-white hover:bg-[#F3E8D6] text-[#08080A] font-bold text-xs uppercase flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <span>Open Interactive Dashboard Console</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-[#08080A]" />
+          </button>
+        </div>
+
+        {/* ============================================================== */}
+        {/* LIVE EVENT STREAM TICKER & PAYLOAD INSPECTION TABLE            */}
+        {/* ============================================================== */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="bg-[#0E0E12] rounded-2xl p-5 sm:p-6 border border-white/[0.08] shadow-lg"
+          className="bg-[#0E0E12] rounded-3xl p-5 sm:p-7 border border-white/[0.08] shadow-2xl mt-10"
         >
           {/* Header Controls Bar */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 mb-4 border-b border-white/[0.06] gap-3">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-[#E7D7BE]">
+              <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-orange-400">
                 <Activity className="w-4 h-4" />
               </div>
               <div>
@@ -386,7 +646,6 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Stream state toggle button */}
               <button
                 onClick={() => setIsPaused(!isPaused)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
@@ -394,50 +653,34 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                     ? 'bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500/25' 
                     : 'bg-white/[0.04] text-[#D4CEBF] border-white/10 hover:bg-white/[0.08]'
                 }`}
-                title={isPaused ? "Resume live streaming" : "Pause stream for closer inspection"}
               >
-                {isPaused ? <Play className="w-3.5 h-3.5 text-amber-400" /> : <Pause className="w-3.5 h-3.5 text-[#E7D7BE]" />}
+                {isPaused ? <Play className="w-3.5 h-3.5 text-amber-400" /> : <Pause className="w-3.5 h-3.5 text-orange-400" />}
                 <span>{isPaused ? 'Paused' : 'Live Stream'}</span>
               </button>
 
-              {/* Inject Test Event Button */}
               <button
                 onClick={() => handleInjectEvent(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#E7D7BE] bg-white/[0.04] hover:bg-[#E7D7BE]/15 border border-[#E7D7BE]/30 flex items-center gap-1.5 transition-colors"
-                title="Inject synthetic ride or payment event"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-orange-400 bg-white/[0.04] hover:bg-orange-500/15 border border-orange-500/30 flex items-center gap-1.5 transition-colors"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
                 <span>Emit Event</span>
               </button>
 
-              {/* Inject DLQ event button */}
               <button
                 onClick={() => handleInjectEvent(true)}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 flex items-center gap-1.5 transition-colors"
-                title="Inject malformed event to trigger DLQ isolation"
               >
                 <AlertOctagon className="w-3.5 h-3.5" />
                 <span>Simulate DLQ</span>
               </button>
-
-              {/* Status Indicator Pill */}
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] ml-auto lg:ml-0">
-                <span className={`w-2 h-2 rounded-full ${
-                  isPaused ? 'bg-amber-400' : connectionMode === 'websocket' ? 'bg-cyan-400' : connectionMode === 'rest' ? 'bg-emerald-400' : 'bg-[#E7D7BE]'
-                } ${isPaused ? '' : 'animate-pulse'}`} />
-                <span className="text-[10px] font-mono font-medium text-[#D4CEBF] uppercase">
-                  {isPaused ? 'INSPECTION FROZEN' : connectionMode === 'websocket' ? 'WEBSOCKET FEED' : connectionMode === 'rest' ? 'FASTAPI REST' : 'INGESTION ACTIVE'}
-                </span>
-              </div>
             </div>
           </div>
 
           {/* Filtering and Search Controls Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
-            {/* Filter Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
               <span className="text-[11px] text-[#A39E93] mr-1 flex items-center gap-1 shrink-0 font-medium">
-                <Filter className="w-3 h-3 text-[#E7D7BE]" /> Filter:
+                <Filter className="w-3 h-3 text-orange-400" /> Filter:
               </span>
               {[
                 { key: 'all', label: 'All', count: counts.all },
@@ -453,7 +696,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                     onClick={() => setFilterCategory(tab.key as any)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all shrink-0 flex items-center gap-1.5 ${
                       isActive
-                        ? 'bg-[#E7D7BE] text-[#08080A] font-bold shadow-xs'
+                        ? 'bg-white text-[#08080A] font-bold shadow-xs'
                         : 'bg-white/[0.03] text-[#A39E93] hover:text-[#F5F3EF] hover:bg-white/[0.07] border border-white/[0.04]'
                     }`}
                   >
@@ -468,7 +711,6 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
               })}
             </div>
 
-            {/* Instant Search Bar */}
             <div className="relative min-w-[220px]">
               <Search className="w-3.5 h-3.5 text-[#A39E93] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -476,7 +718,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search ID, partition, type..."
-                className="w-full bg-[#14141A] border border-white/[0.08] focus:border-[#E7D7BE]/50 rounded-lg pl-8 pr-7 py-1 text-xs text-[#F5F3EF] placeholder-[#71717A] outline-none transition-colors"
+                className="w-full bg-[#14141A] border border-white/[0.08] focus:border-orange-500/50 rounded-lg pl-8 pr-7 py-1 text-xs text-[#F5F3EF] placeholder-[#71717A] outline-none transition-colors"
               />
               {searchQuery && (
                 <button
@@ -523,13 +765,12 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                             isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'
                           }`}
                         >
-                          <td className="py-2.5 font-mono text-[#E7D7BE]">
+                          <td className="py-2.5 font-mono text-orange-400">
                             <div className="inline-flex items-center gap-1.5 group">
                               <span className="font-semibold">{evt.id}</span>
                               <button
                                 onClick={(e) => handleCopyId(evt.id, e)}
                                 className="opacity-60 group-hover:opacity-100 hover:text-white p-0.5 rounded transition-opacity"
-                                title="Copy event ID"
                               >
                                 {isCopied ? (
                                   <span className="text-[10px] text-emerald-400 font-sans font-bold flex items-center gap-0.5">
@@ -573,7 +814,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                                 e.stopPropagation()
                                 setExpandedEventId(isExpanded ? null : evt.id)
                               }}
-                              className="inline-flex items-center gap-1 text-[11px] font-medium text-[#E7D7BE] hover:text-white transition-colors bg-white/[0.03] hover:bg-white/[0.08] px-2 py-0.5 rounded border border-white/[0.06]"
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-orange-400 hover:text-white transition-colors bg-white/[0.03] hover:bg-white/[0.08] px-2 py-0.5 rounded border border-white/[0.06]"
                             >
                               <Code2 className="w-3 h-3" />
                               <span>{isExpanded ? 'Hide' : 'Inspect'}</span>
@@ -582,7 +823,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                           </td>
                         </tr>
 
-                        {/* Expandable JSON Schema / Envelope inspection row */}
+                        {/* Collapsible Envelope Drawer */}
                         <AnimatePresence>
                           {isExpanded && (
                             <tr>
@@ -591,11 +832,11 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: 'auto' }}
                                   exit={{ opacity: 0, height: 0 }}
-                                  className="overflow-hidden bg-[#0A0A0D] p-3.5 sm:p-4 border border-[#E7D7BE]/30 my-1 rounded-xl shadow-inner"
+                                  className="overflow-hidden bg-[#0A0A0D] p-3.5 sm:p-4 border border-orange-500/30 my-1 rounded-xl shadow-inner"
                                 >
                                   <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-white/[0.06]">
                                     <div className="flex items-center gap-2">
-                                      <Code2 className="w-3.5 h-3.5 text-[#E7D7BE]" />
+                                      <Code2 className="w-3.5 h-3.5 text-orange-400" />
                                       <span className="text-[11px] font-mono font-bold text-[#F5F3EF]">
                                         Telemetry Envelope & Schema Validation
                                       </span>
@@ -635,7 +876,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                                         </div>
                                         <div className="flex items-center justify-between text-[11px]">
                                           <span className="text-[#A39E93]">Partition Sharding Key:</span>
-                                          <span className="font-mono text-[#E7D7BE]">murmur2(entity_id)</span>
+                                          <span className="font-mono text-orange-400">murmur2(entity_id)</span>
                                         </div>
                                         <div className="flex items-center justify-between text-[11px]">
                                           <span className="text-[#A39E93]">Deduplication Window:</span>
@@ -643,15 +884,15 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                                         </div>
                                         <div className="flex items-center justify-between text-[11px]">
                                           <span className="text-[#A39E93]">Processing Checkpoint:</span>
-                                          <span className="font-mono text-emerald-400">Committed (Offset #{Math.floor(100000 + Math.random() * 500000)})</span>
+                                          <span className="font-mono text-emerald-400">Committed</span>
                                         </div>
                                       </div>
 
                                       <div className="text-[10px] text-[#A39E93] italic flex items-center justify-between">
-                                        <span>Click "Inspect" or row again to collapse view.</span>
+                                        <span>Click "Inspect" to collapse view.</span>
                                         <button
                                           onClick={() => handleCopyId(JSON.stringify(evt.payload || evt, null, 2), { stopPropagation: () => {} } as any)}
-                                          className="text-[#E7D7BE] hover:underline flex items-center gap-1 font-mono text-[10px]"
+                                          className="text-orange-400 hover:underline flex items-center gap-1 font-mono text-[10px]"
                                         >
                                           <Copy className="w-2.5 h-2.5" /> Copy Raw JSON
                                         </button>
