@@ -34,7 +34,6 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
   const [throughput, setThroughput] = useState(12840)
   const [activeRides, setActiveRides] = useState(2318)
   const [avgLatency, setAvgLatency] = useState(320)
-  const [signalTick, setSignalTick] = useState(0)
   const [selectedMetric, setSelectedMetric] = useState<'throughput' | 'rides' | 'latency'>('throughput')
 
   const [events, setEvents] = useState<StreamEvent[]>([
@@ -192,14 +191,13 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
     }, 2000)
   }
 
-  // Real-time metrics tick and pulse animation
+  // Real-time metrics tick
   useEffect(() => {
     if (isPaused) return
     const interval = setInterval(() => {
       setThroughput(Math.floor(12700 + Math.random() * 400))
       setActiveRides(Math.floor(2300 + Math.random() * 40))
       setAvgLatency(Math.floor(310 + Math.random() * 25))
-      setSignalTick((prev) => prev + 1)
     }, 2500)
     return () => clearInterval(interval)
   }, [isPaused])
@@ -327,7 +325,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
       
       {/* Background Radial Amber Sunset Aura matching the uploaded screenshot */}
       <div 
-        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] sm:w-[900px] md:w-[1100px] h-[600px] sm:h-[800px] rounded-full blur-[140px] opacity-35 md:opacity-50"
+        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] sm:w-[900px] md:w-[1050px] h-[600px] sm:h-[750px] rounded-full blur-[140px] opacity-35 md:opacity-45"
         style={{
           background: 'radial-gradient(circle, rgba(234, 88, 12, 0.40) 0%, rgba(249, 115, 22, 0.18) 40%, rgba(8, 8, 10, 0) 75%)'
         }}
@@ -353,27 +351,27 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
         </div>
 
         {/* ============================================================== */}
-        {/* CENTERPIECE DEVICE & TELEMETRY SHOWCASE MATCHING THE SCREENSHOT */}
+        {/* COMPACT CENTERPIECE: ZERO SIDE GAPS, PROPORTIONED CLUSTER     */}
         {/* ============================================================== */}
         <div className="relative w-full flex items-center justify-center my-6 md:my-10">
           
-          <div className="relative w-full max-w-[1100px] flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-4">
+          <div className="relative flex flex-col lg:flex-row items-center justify-center gap-4 lg:gap-0 max-w-4xl mx-auto w-full">
             
             {/* LEFT COLUMN: 3 Large Metric Cards */}
-            <div className="w-full lg:w-[260px] flex lg:flex-col items-center lg:items-end justify-center gap-3 sm:gap-4 z-20">
+            <div className="w-full lg:w-[210px] flex lg:flex-col items-center lg:items-end justify-center gap-3 z-20 shrink-0">
               
               {/* Card 1: Event Throughput */}
               <motion.div
-                whileHover={{ scale: 1.03, x: 2 }}
+                whileHover={{ scale: 1.03 }}
                 onClick={() => setSelectedMetric('throughput')}
-                className={`cursor-pointer w-full max-w-[220px] p-4 sm:p-5 rounded-2xl border transition-all text-left ${
+                className={`cursor-pointer w-full p-4 rounded-2xl border transition-all text-left ${
                   selectedMetric === 'throughput'
                     ? 'bg-[#181824] border-orange-500/60 shadow-[0_0_20px_rgba(234,88,12,0.25)] ring-1 ring-orange-500/30'
-                    : 'bg-[#0E0E14]/80 hover:bg-[#14141E] border-white/[0.08] shadow-md'
+                    : 'bg-[#0E0E14]/90 hover:bg-[#14141E] border-white/[0.08] shadow-md'
                 }`}
               >
-                <div className="text-xl sm:text-2xl font-bold font-mono text-white mb-0.5">
-                  {throughput.toLocaleString()} <span className="text-sm font-normal text-[#A39E93]">/sec</span>
+                <div className="text-lg sm:text-xl font-bold font-mono text-white mb-0.5">
+                  {throughput.toLocaleString()} <span className="text-xs font-normal text-[#A39E93]">/sec</span>
                 </div>
                 <div className="text-xs text-[#A39E93] font-medium">
                   Event Throughput
@@ -382,15 +380,15 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
 
               {/* Card 2: Active Rides */}
               <motion.div
-                whileHover={{ scale: 1.03, x: 2 }}
+                whileHover={{ scale: 1.03 }}
                 onClick={() => setSelectedMetric('rides')}
-                className={`cursor-pointer w-full max-w-[220px] p-4 sm:p-5 rounded-2xl border transition-all text-left ${
+                className={`cursor-pointer w-full p-4 rounded-2xl border transition-all text-left ${
                   selectedMetric === 'rides'
                     ? 'bg-[#181824] border-orange-500/60 shadow-[0_0_20px_rgba(234,88,12,0.25)] ring-1 ring-orange-500/30'
-                    : 'bg-[#0E0E14]/80 hover:bg-[#14141E] border-white/[0.08] shadow-md'
+                    : 'bg-[#0E0E14]/90 hover:bg-[#14141E] border-white/[0.08] shadow-md'
                 }`}
               >
-                <div className="text-xl sm:text-2xl font-bold font-mono text-white mb-0.5">
+                <div className="text-lg sm:text-xl font-bold font-mono text-white mb-0.5">
                   {activeRides.toLocaleString()}
                 </div>
                 <div className="text-xs text-[#A39E93] font-medium">
@@ -400,16 +398,16 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
 
               {/* Card 3: Avg. Latency */}
               <motion.div
-                whileHover={{ scale: 1.03, x: 2 }}
+                whileHover={{ scale: 1.03 }}
                 onClick={() => setSelectedMetric('latency')}
-                className={`cursor-pointer w-full max-w-[220px] p-4 sm:p-5 rounded-2xl border transition-all text-left ${
+                className={`cursor-pointer w-full p-4 rounded-2xl border transition-all text-left ${
                   selectedMetric === 'latency'
                     ? 'bg-[#181824] border-orange-500/60 shadow-[0_0_20px_rgba(234,88,12,0.25)] ring-1 ring-orange-500/30'
-                    : 'bg-[#0E0E14]/80 hover:bg-[#14141E] border-white/[0.08] shadow-md'
+                    : 'bg-[#0E0E14]/90 hover:bg-[#14141E] border-white/[0.08] shadow-md'
                 }`}
               >
-                <div className="text-xl sm:text-2xl font-bold font-mono text-white mb-0.5">
-                  ~{avgLatency} <span className="text-sm font-normal text-[#A39E93]">ms</span>
+                <div className="text-lg sm:text-xl font-bold font-mono text-white mb-0.5">
+                  ~{avgLatency} <span className="text-xs font-normal text-[#A39E93]">ms</span>
                 </div>
                 <div className="text-xs text-[#A39E93] font-medium">
                   Avg. Latency
@@ -418,65 +416,23 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
 
             </div>
 
-            {/* SVG Connecting Tracks (Desktop) */}
-            <div className="hidden lg:block absolute inset-0 pointer-events-none z-10">
-              <svg className="w-full h-full" viewBox="0 0 1100 580" fill="none">
-                {/* Connectors from Left Metric Cards into Phone */}
-                <path
-                  d="M 250 170 H 350"
-                  stroke="rgba(255, 255, 255, 0.16)"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 4"
-                />
-                <path
-                  d="M 250 290 H 330"
-                  stroke="rgba(255, 255, 255, 0.16)"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 4"
-                />
-                <path
-                  d="M 250 410 H 350"
-                  stroke="rgba(255, 255, 255, 0.16)"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 4"
-                />
-
-                {/* Animated signal dot */}
+            {/* DEDICATED LEFT CONNECTOR BRIDGE (Seamless Dotted Tree, Zero Gap) */}
+            <div className="hidden lg:flex items-center justify-center w-12 shrink-0 z-10 pointer-events-none">
+              <svg className="w-12 h-44 overflow-visible" viewBox="0 0 48 180" fill="none">
+                <path d="M 0 35 H 24 V 90 H 48" stroke="rgba(255, 255, 255, 0.20)" strokeWidth="1.5" strokeDasharray="3 3" />
+                <path d="M 0 90 H 48" stroke="rgba(255, 255, 255, 0.20)" strokeWidth="1.5" strokeDasharray="3 3" />
+                <path d="M 0 145 H 24 V 90 H 48" stroke="rgba(255, 255, 255, 0.20)" strokeWidth="1.5" strokeDasharray="3 3" />
                 <motion.circle
                   r="3.5"
                   fill="#F97316"
-                  key={`pulse-dash-left-${signalTick}`}
-                  animate={{
-                    cx: [250, 350],
-                    cy: [290, 290],
-                    opacity: [0, 1, 0]
-                  }}
-                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-                />
-
-                {/* Connector from Bottom Card to Right Badges */}
-                <path
-                  d="M 720 400 H 830"
-                  stroke="rgba(255, 255, 255, 0.16)"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 4"
-                />
-                <motion.circle
-                  r="3.5"
-                  fill="#10B981"
-                  key={`pulse-dash-right-${signalTick}`}
-                  animate={{
-                    cx: [720, 830],
-                    cy: [400, 400],
-                    opacity: [0, 1, 0]
-                  }}
-                  transition={{ duration: 1.6, delay: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+                  animate={{ cx: [0, 48], cy: [90, 90], opacity: [0, 1, 0] }}
+                  transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                 />
               </svg>
             </div>
 
             {/* CENTER COLUMN: Phone Glass Enclosure with 3 Live Notification Cards */}
-            <div className="relative w-full max-w-[370px] sm:max-w-[400px] h-[540px] sm:h-[580px] rounded-[44px] sm:rounded-[48px] bg-[#0E0E14]/85 backdrop-blur-2xl border border-white/[0.12] shadow-[0_30px_70px_rgba(0,0,0,0.9),0_0_40px_rgba(249,115,22,0.14)] p-4 sm:p-5 flex flex-col justify-between z-20">
+            <div className="relative w-full max-w-[340px] sm:max-w-[360px] h-[520px] sm:h-[550px] rounded-[42px] bg-[#0E0E14]/90 backdrop-blur-2xl border border-white/[0.12] shadow-[0_30px_70px_rgba(0,0,0,0.9),0_0_40px_rgba(249,115,22,0.14)] p-4 sm:p-5 flex flex-col justify-between z-20 shrink-0">
               
               {/* Dynamic Island / Top Speaker Notch */}
               <div className="text-center pt-1 z-30">
@@ -496,16 +452,16 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
               <div className="absolute top-20 bottom-16 left-1/2 -translate-x-1/2 w-0 border-l border-dashed border-white/10 pointer-events-none z-0" />
 
               {/* 3 FLOATING NOTIFICATION CARDS (Exact match to screenshot) */}
-              <div className="relative flex-1 my-4 flex flex-col justify-around z-20">
+              <div className="relative flex-1 my-3 flex flex-col justify-around z-20">
                 
                 {/* Notification Card 1: StreamForge 10:24 */}
                 <motion.div
-                  animate={{ y: [-3, 3, -3] }}
+                  animate={{ y: [-2, 2, -2] }}
                   transition={{ repeat: Infinity, duration: 5.2, ease: 'easeInOut' }}
-                  whileHover={{ scale: 1.03 }}
-                  className="relative sm:-left-6 w-[90%] sm:w-[86%] bg-[#181822]/90 backdrop-blur-xl rounded-2xl p-3.5 sm:p-4 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
+                  whileHover={{ scale: 1.02 }}
+                  className="relative w-full bg-[#181822]/95 backdrop-blur-xl rounded-2xl p-3.5 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <StreamForgeHexagonLogo className="w-4 h-4" />
                       <span className="text-xs font-bold text-white">StreamForge</span>
@@ -519,12 +475,12 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
 
                 {/* Notification Card 2: Pipeline 10:25 */}
                 <motion.div
-                  animate={{ y: [3, -3, 3] }}
+                  animate={{ y: [2, -2, 2] }}
                   transition={{ repeat: Infinity, duration: 5.8, ease: 'easeInOut', delay: 0.5 }}
-                  whileHover={{ scale: 1.03 }}
-                  className="relative self-end sm:-right-6 w-[90%] sm:w-[86%] bg-[#181822]/90 backdrop-blur-xl rounded-2xl p-3.5 sm:p-4 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
+                  whileHover={{ scale: 1.02 }}
+                  className="relative w-full bg-[#181822]/95 backdrop-blur-xl rounded-2xl p-3.5 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-white">Pipeline</span>
                     </div>
@@ -537,12 +493,12 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
 
                 {/* Notification Card 3: Analytics 10:26 */}
                 <motion.div
-                  animate={{ y: [-3, 3, -3] }}
+                  animate={{ y: [-2, 2, -2] }}
                   transition={{ repeat: Infinity, duration: 6, ease: 'easeInOut', delay: 1 }}
-                  whileHover={{ scale: 1.03 }}
-                  className="relative sm:-left-4 w-[90%] sm:w-[86%] bg-[#181822]/90 backdrop-blur-xl rounded-2xl p-3.5 sm:p-4 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
+                  whileHover={{ scale: 1.02 }}
+                  className="relative w-full bg-[#181822]/95 backdrop-blur-xl rounded-2xl p-3.5 border border-white/[0.08] hover:border-orange-500/50 shadow-xl transition-all"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2">
                       <StreamForgeHexagonLogo className="w-4 h-4" />
                       <span className="text-xs font-bold text-white">Analytics</span>
@@ -569,8 +525,22 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
 
             </div>
 
+            {/* DEDICATED RIGHT CONNECTOR BRIDGE (Seamless Dotted Bridge, Zero Gap) */}
+            <div className="hidden lg:flex items-center justify-center w-12 shrink-0 z-10 pointer-events-none">
+              <svg className="w-12 h-28 overflow-visible" viewBox="0 0 48 80" fill="none">
+                <path d="M 0 40 H 24 V 16 H 48" stroke="rgba(255, 255, 255, 0.20)" strokeWidth="1.5" strokeDasharray="3 3" />
+                <path d="M 0 40 H 48" stroke="rgba(255, 255, 255, 0.20)" strokeWidth="1.5" strokeDasharray="3 3" />
+                <motion.circle
+                  r="3.5"
+                  fill="#10B981"
+                  animate={{ cx: [0, 48], cy: [40, 40], opacity: [0, 1, 0] }}
+                  transition={{ duration: 1.8, delay: 0.9, repeat: Infinity, ease: 'easeInOut' }}
+                />
+              </svg>
+            </div>
+
             {/* RIGHT COLUMN: 3 Pill Badges (Live, Events, Analytics) */}
-            <div className="w-full lg:w-[260px] flex lg:flex-col items-center lg:items-start justify-center gap-3 z-20">
+            <div className="w-full lg:w-[190px] flex lg:flex-col items-center lg:items-start justify-center gap-3 z-20 shrink-0">
               
               {/* Badge 1: Live */}
               <div 
@@ -583,10 +553,10 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                 </span>
               </div>
 
-              {/* Badges 2 & 3 in a neat row */}
-              <div className="flex items-center gap-2.5">
+              {/* Badges 2 & 3 in a row */}
+              <div className="flex items-center gap-2">
                 {/* Badge 2: Events */}
-                <div className="cursor-pointer px-4 py-2 rounded-2xl bg-[#14141E] hover:bg-[#1A1A28] border border-white/10 flex items-center gap-2 transition-all shadow-md">
+                <div className="cursor-pointer px-3.5 py-2 rounded-2xl bg-[#14141E] hover:bg-[#1A1A28] border border-white/10 flex items-center gap-2 transition-all shadow-md">
                   <BarChart2 className="w-3.5 h-3.5 text-white/80" />
                   <span className="text-xs font-semibold text-white">Events</span>
                 </div>
@@ -594,7 +564,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
                 {/* Badge 3: Analytics */}
                 <div 
                   onClick={onViewDashboard}
-                  className="cursor-pointer px-4 py-2 rounded-2xl bg-[#14141E] hover:bg-[#1A1A28] border border-white/10 flex items-center gap-2 transition-all shadow-md group"
+                  className="cursor-pointer px-3.5 py-2 rounded-2xl bg-[#14141E] hover:bg-[#1A1A28] border border-white/10 flex items-center gap-2 transition-all shadow-md group"
                 >
                   <Layers className="w-3.5 h-3.5 text-white/80 group-hover:text-orange-400 transition-colors" />
                   <span className="text-xs font-semibold text-white">Analytics</span>

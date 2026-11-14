@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 StreamForge — Automated Pipeline & Validation Test Suite
 Specification: streamforge_docs/architecture.md & streamforge_docs/RULES.md

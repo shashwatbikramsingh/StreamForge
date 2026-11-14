@@ -51,12 +51,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onGetStartedClick, onExploreClic
   }, [])
 
   return (
-    <header className={`sticky top-0 z-50 w-full px-4 sm:px-6 lg:px-8 py-3.5 transition-all duration-200 ${
-      isScrolled 
-        ? 'bg-[#08080A]/90 backdrop-blur-xl border-b border-white/[0.1] shadow-[0_4px_24px_rgba(0,0,0,0.5)]' 
-        : 'bg-[#08080A]/75 backdrop-blur-md border-b border-white/[0.06]'
-    }`}>
-      <nav className="max-w-7xl mx-auto flex items-center justify-between">
+    <header className="sticky top-0 z-50 w-full px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-1 pointer-events-none">
+      <nav className={`pointer-events-auto max-w-5xl mx-auto px-5 py-2.5 sm:px-6 sm:py-3 rounded-full flex items-center justify-between transition-all duration-300 ${
+        isScrolled 
+          ? 'bg-[#0E0E14]/95 backdrop-blur-2xl border border-white/15 shadow-[0_10px_35px_rgba(0,0,0,0.85)]' 
+          : 'bg-[#12121A]/80 backdrop-blur-xl border border-white/10 shadow-[0_8px_25px_rgba(0,0,0,0.6)]'
+      }`}>
         
         {/* Left: Brand Logo matching the screenshot's 3D isometric orange hexagon */}
         <a href="#" className="flex items-center gap-2.5 group">

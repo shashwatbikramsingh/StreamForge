@@ -1,535 +1,440 @@
-import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import React, { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
-  Radio, Cpu, Database, BarChart2, 
-  Activity, Layers, Sparkles, Check
+  Layers, Info, ArrowUpRight, ArrowDownRight, 
+  Sparkles, Check, ChevronDown, ChevronUp, Mic, Send, Plus, User
 } from 'lucide-react'
 
+// Brand Icons
+const SlackIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none">
+    <path d="M6 15a2 2 0 1 1-2-2h2v2z" fill="#E01E5A" />
+    <path d="M7 15a2 2 0 1 1 2-2v2H7z" fill="#E01E5A" />
+    <path d="M9 6a2 2 0 1 1-2 2V6h2z" fill="#36C5F0" />
+    <path d="M9 7a2 2 0 1 1 2 2H9V7z" fill="#36C5F0" />
+    <path d="M18 9a2 2 0 1 1 2 2h-2V9z" fill="#2EB67D" />
+    <path d="M17 9a2 2 0 1 1-2 2v-2h2z" fill="#2EB67D" />
+    <path d="M15 18a2 2 0 1 1 2-2v2h-2z" fill="#ECB22E" />
+    <path d="M15 17a2 2 0 1 1-2-2h2v2z" fill="#ECB22E" />
+  </svg>
+)
+
+const NotionIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <div className={`${className} bg-white rounded flex items-center justify-center font-bold text-black text-[9px] font-serif leading-none`}>
+    N
+  </div>
+)
+
+const DropboxIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="#0061FF">
+    <path d="M6 3.5L12 7.5L6 11.5L0 7.5L6 3.5ZM18 3.5L24 7.5L18 11.5L12 7.5L18 3.5ZM0 15.5L6 19.5L12 15.5L6 11.5L0 15.5ZM24 15.5L18 19.5L12 15.5L18 11.5L24 15.5ZM6 21L12 17L18 21L12 24L6 21Z" />
+  </svg>
+)
+
 export const FeaturesGrid: React.FC = () => {
-  // Card 1: Kafka topics interactive state
-  const [activeTopic, setActiveTopic] = useState<'rides' | 'payments' | 'users'>('rides')
-  const [topicRates, setTopicRates] = useState({
-    rides: 12840,
-    payments: 4120,
-    users: 1950,
-  })
+  // Card 1: Integrations state
+  const [integrations, setIntegrations] = useState([
+    { name: 'Slack', desc: 'Sent messages & notifications', connected: true, icon: SlackIcon },
+    { name: 'Notion', desc: 'Create and update pages', connected: false, icon: NotionIcon },
+    { name: 'Dropbox', desc: 'Create and update pages', connected: false, icon: DropboxIcon },
+  ])
 
-  // Card 2: Python stream processing mode
-  const [processingMode, setProcessingMode] = useState<'watermark' | 'dedup' | 'schema'>('watermark')
-  const [lastProcessed, setLastProcessed] = useState('EVT-94281')
+  // Card 4: Interactive Prompt Intelligence State
+  const [activeReasoning, setActiveReasoning] = useState('DeepThink')
+  const [isDropdownOpen, setIsDropdownOpen] = useState(true)
+  const [promptText, setPromptText] = useState('')
 
-  // Card 3: PostgreSQL idempotency test trigger
-  const [idemStatus, setIdemStatus] = useState<string>('ON CONFLICT (id) DO NOTHING')
-
-  // Card 4: Live Analytics mini chart hover state
-  const [chartHovered, setChartHovered] = useState(false)
-  const [chartValue, setChartValue] = useState(14250)
-
-  // Card 5: Monitoring latency simulation
-  const [latencyP95, setLatencyP95] = useState(2.1)
-  const [alertActive, setAlertActive] = useState(false)
-
-  // Card 6: Docker service scale state
-  const [activeContainers, setActiveContainers] = useState<Record<string, boolean>>({
-    kafka: true,
-    consumer: true,
-    postgres: true,
-    fastapi: true,
-  })
-
-  // Live simulation tick
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTopicRates({
-        rides: Math.floor(12500 + Math.random() * 600),
-        payments: Math.floor(4000 + Math.random() * 300),
-        users: Math.floor(1900 + Math.random() * 150),
-      })
-      setLastProcessed(`EVT-${Math.floor(10000 + Math.random() * 90000)}`)
-      setChartValue(Math.floor(13800 + Math.random() * 900))
-      setLatencyP95(+(1.8 + Math.random() * 0.7).toFixed(1))
-    }, 2600)
-    return () => clearInterval(timer)
-  }, [])
-
-  const handleTestIdempotency = () => {
-    setIdemStatus('Replaying duplicate payload...')
-    setTimeout(() => {
-      setIdemStatus('0 Duplicates Written (Idempotent Pass)')
-    }, 600)
-    setTimeout(() => {
-      setIdemStatus('ON CONFLICT (id) DO NOTHING')
-    }, 3200)
+  const toggleConnect = (index: number) => {
+    setIntegrations((prev) => 
+      prev.map((item, idx) => idx === index ? { ...item, connected: !item.connected } : item)
+    )
   }
 
-  const toggleContainer = (svc: string) => {
-    setActiveContainers((prev) => ({
-      ...prev,
-      [svc]: !prev[svc],
-    }))
-  }
+  const reasoningOptions = [
+    { id: 'quick', label: 'Quick answer', icon: '⚡' },
+    { id: 'balanced', label: 'Balanced', icon: '⚖' },
+    { id: 'deepthink', label: 'DeepThink', icon: '🧠' },
+    { id: 'research', label: 'Research', icon: '🔍' },
+  ]
 
   return (
-    <section id="features" className="w-full py-16 md:py-24 scroll-mt-12 bg-[#08080A] relative">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="features" className="w-full py-16 md:py-24 scroll-mt-12 bg-[#08080A] relative overflow-hidden">
+      
+      {/* Background ambient lighting */}
+      <div 
+        className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 w-[850px] h-[550px] rounded-full blur-[140px] opacity-25"
+        style={{
+          background: 'radial-gradient(circle, rgba(234, 88, 12, 0.35) 0%, rgba(59, 130, 246, 0.15) 50%, transparent 80%)'
+        }}
+      />
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto mb-14 md:mb-18">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-[#D4CEBF] text-[10.5px] font-bold tracking-widest uppercase mb-3.5 backdrop-blur-md">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-            <span>CORE ARCHITECTURE</span>
-          </div>
+        {/* 2x2 Glassmorphism Grid matching Image 2 exactly */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
 
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#F5F3EF] tracking-tight mb-4">
-            Built for High-Throughput Streams
-          </h2>
-
-          <p className="text-sm sm:text-base text-[#A39E93] leading-relaxed">
-            Every layer engineered with strict data engineering standards, fault tolerance, and mathematically verifiable consistency.
-          </p>
-        </div>
-
-        {/* 3-Column Glassmorphism Grid matching the user's uploaded mockup */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-          {/* CARD 1: Real-time Ingestion — Apache Kafka */}
+          {/* ============================================================== */}
+          {/* CARD 1 (Top Left): Visibility Metrics (Slack, Notion, Dropbox) */}
+          {/* ============================================================== */}
           <motion.div
-            initial={{ opacity: 0, y: 15 }}
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: 0.05 }}
-            whileHover={{ y: -4 }}
-            className="group relative rounded-3xl bg-[#0D0D14]/80 backdrop-blur-xl border border-white/[0.08] hover:border-white/[0.18] p-5 sm:p-6 flex flex-col justify-between shadow-xl transition-all overflow-hidden"
+            transition={{ duration: 0.5 }}
+            className="rounded-3xl bg-[#0C0C12]/90 border border-white/[0.08] p-5 sm:p-6 flex flex-col justify-between hover:border-white/20 transition-all shadow-[0_20px_50px_rgba(0,0,0,0.7)] group"
           >
-            {/* Top Interactive Visual Sandbox */}
-            <div className="relative h-[210px] w-full rounded-2xl bg-[#08080C] border border-white/[0.06] p-4 flex flex-col justify-between overflow-hidden mb-6">
-              {/* Warm amber diagonal light beam */}
-              <div className="pointer-events-none absolute -top-8 -right-8 w-44 h-44 rounded-full bg-gradient-to-br from-orange-500/35 to-amber-600/10 blur-2xl" />
+            {/* Visual Screen with warm amber flare */}
+            <div className="w-full h-[250px] sm:h-[270px] rounded-2xl bg-[#07070A] border border-white/[0.06] relative overflow-hidden flex flex-col justify-center items-center p-4">
+              
+              {/* Warm Amber Diagonal Light Streak */}
+              <div className="absolute -top-12 -left-12 w-72 h-72 rounded-full bg-gradient-to-br from-amber-500/40 via-orange-500/20 to-transparent blur-3xl pointer-events-none" />
+              <div className="absolute top-0 left-16 w-20 h-64 -rotate-45 bg-gradient-to-b from-orange-400/30 via-amber-500/10 to-transparent blur-xl pointer-events-none" />
 
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-white/[0.06] relative z-10">
-                <span className="font-mono text-[#A39E93] flex items-center gap-1.5">
-                  <Radio className="w-3.5 h-3.5 text-orange-400" />
-                  Kafka KRaft Topics
-                </span>
-                <span className="font-mono text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                  4 Partitions Active
-                </span>
-              </div>
-
-              {/* Topics Interactive Rows */}
-              <div className="space-y-2 relative z-10">
-                {[
-                  { id: 'rides', name: 'streamforge.rides.v1', rate: topicRates.rides },
-                  { id: 'payments', name: 'streamforge.payments.v1', rate: topicRates.payments },
-                  { id: 'users', name: 'streamforge.auth.v1', rate: topicRates.users },
-                ].map((t) => {
-                  const isActive = activeTopic === t.id
+              {/* 3 Integration Rows */}
+              <div className="w-full max-w-[320px] space-y-2.5 relative z-10">
+                {integrations.map((item, idx) => {
+                  const Icon = item.icon
                   return (
-                    <div
-                      key={t.id}
-                      onClick={() => setActiveTopic(t.id as any)}
-                      className={`cursor-pointer p-2.5 rounded-xl border flex items-center justify-between transition-all ${
-                        isActive
-                          ? 'bg-[#181824] border-orange-500/50 shadow-md ring-1 ring-orange-500/20'
-                          : 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.04]'
-                      }`}
+                    <div 
+                      key={item.name}
+                      className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-[#14141E]/80 border border-white/[0.08] backdrop-blur-md transition-all hover:bg-[#181826]"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-orange-400 animate-pulse' : 'bg-white/30'}`} />
-                        <span className="font-mono text-[11px] text-[#D4CEBF]">{t.name}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-lg bg-white/[0.05] flex items-center justify-center shrink-0">
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-white leading-tight">
+                            {item.name}
+                          </div>
+                          <div className="text-[10px] text-[#A39E93] leading-tight">
+                            {item.desc}
+                          </div>
+                        </div>
                       </div>
-                      <span className="font-mono text-[11px] font-bold text-white">
-                        {t.rate.toLocaleString()}/s
-                      </span>
+
+                      <button
+                        onClick={() => toggleConnect(idx)}
+                        className={`px-3 py-1 rounded-full text-[10.5px] font-semibold transition-all ${
+                          item.connected
+                            ? 'text-amber-300 bg-amber-500/15 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                            : 'text-[#D4CEBF] bg-white/[0.04] border border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        {item.connected ? 'Connected' : 'Connect'}
+                      </button>
                     </div>
                   )
                 })}
               </div>
-
-              <div className="flex items-center justify-between text-[10px] text-[#A39E93] font-mono relative z-10 pt-1">
-                <span>Murmur2 Keying</span>
-                <span className="text-orange-400">At-Least-Once Broker Guarantee</span>
-              </div>
             </div>
 
-            {/* Bottom Content */}
-            <div>
-              <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-orange-400 mb-3 group-hover:scale-105 group-hover:bg-orange-500/20 transition-all">
-                <Radio className="w-4 h-4" />
+            {/* Label and Description */}
+            <div className="mt-5">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Layers className="w-4 h-4 text-white/90" />
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  Visibility Metrics
+                </h3>
               </div>
-              <h3 className="text-lg font-bold text-[#F5F3EF] mb-1.5">
-                Real-time Ingestion — Apache Kafka
-              </h3>
-              <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed">
-                Ingest high-frequency event streams with single-node KRaft broker efficiency, per-entity deterministic keying, and zero message loss.
+              <p className="text-xs sm:text-sm text-[#A39E93] leading-relaxed">
+                Track brand visibility scores across AI platforms and measure share of voice.
               </p>
             </div>
           </motion.div>
 
-          {/* CARD 2: Stream Processing — Python */}
+          {/* ============================================================== */}
+          {/* CARD 2 (Top Right): Competitor Analysis (Marketing Channels)  */}
+          {/* ============================================================== */}
           <motion.div
-            initial={{ opacity: 0, y: 15 }}
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            whileHover={{ y: -4 }}
-            className="group relative rounded-3xl bg-[#0D0D14]/80 backdrop-blur-xl border border-white/[0.08] hover:border-white/[0.18] p-5 sm:p-6 flex flex-col justify-between shadow-xl transition-all overflow-hidden"
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="rounded-3xl bg-[#0C0C12]/90 border border-white/[0.08] p-5 sm:p-6 flex flex-col justify-between hover:border-white/20 transition-all shadow-[0_20px_50px_rgba(0,0,0,0.7)] group"
           >
-            {/* Top Interactive Visual Sandbox */}
-            <div className="relative h-[210px] w-full rounded-2xl bg-[#08080C] border border-white/[0.06] p-4 flex flex-col justify-between overflow-hidden mb-6">
-              {/* Ethereal blue-violet & amber glow beam */}
-              <div className="pointer-events-none absolute -bottom-10 -left-10 w-44 h-44 rounded-full bg-gradient-to-tr from-cyan-500/20 via-orange-500/20 to-transparent blur-2xl" />
+            {/* Visual Screen with cool blue backlight */}
+            <div className="w-full h-[250px] sm:h-[270px] rounded-2xl bg-[#07070A] border border-white/[0.06] relative overflow-hidden p-4 flex flex-col justify-center">
+              
+              {/* Blue Glow Background */}
+              <div className="absolute top-0 right-0 w-80 h-80 rounded-full bg-gradient-to-bl from-blue-600/30 via-indigo-500/15 to-transparent blur-3xl pointer-events-none" />
 
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-white/[0.06] relative z-10">
-                <span className="font-mono text-[#A39E93] flex items-center gap-1.5">
-                  <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                  Python 3.11 Worker
-                </span>
-                <span className="font-mono text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
-                  Async Loop
-                </span>
-              </div>
-
-              {/* Mode Selector Tabs */}
-              <div className="grid grid-cols-3 gap-1.5 relative z-10">
-                {[
-                  { key: 'watermark', label: 'Watermark' },
-                  { key: 'dedup', label: 'Deduplication' },
-                  { key: 'schema', label: 'Schema Check' },
-                ].map((mode) => (
-                  <button
-                    key={mode.key}
-                    onClick={() => setProcessingMode(mode.key as any)}
-                    className={`py-1 text-[10px] font-mono rounded-lg transition-all ${
-                      processingMode === mode.key
-                        ? 'bg-white/10 text-white font-bold border border-white/20'
-                        : 'bg-white/[0.02] text-[#A39E93] hover:text-white'
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Live Processing Terminal Box */}
-              <div className="p-2.5 rounded-xl bg-[#14141E] border border-white/[0.06] font-mono text-[11px] space-y-1 relative z-10">
-                <div className="text-[#A39E93] flex items-center justify-between">
-                  <span>Target: {lastProcessed}</span>
-                  <span className="text-emerald-400 flex items-center gap-0.5">
-                    <Check className="w-3 h-3" /> 0.8ms
-                  </span>
-                </div>
-                <div className="text-orange-400 text-[10px] truncate">
-                  {processingMode === 'watermark' && 'watermark = 5m sliding window'}
-                  {processingMode === 'dedup' && 'sha256 = state_store.contains(hash)'}
-                  {processingMode === 'schema' && 'contract = pydantic.validate(v1.4)'}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-[10px] text-[#A39E93] font-mono relative z-10 pt-1">
-                <span>Monotonic Transitions</span>
-                <span className="text-cyan-400">Zero Unhandled Panics</span>
-              </div>
-            </div>
-
-            {/* Bottom Content */}
-            <div>
-              <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-cyan-400 mb-3 group-hover:scale-105 group-hover:bg-cyan-500/20 transition-all">
-                <Cpu className="w-4 h-4" />
-              </div>
-              <h3 className="text-lg font-bold text-[#F5F3EF] mb-1.5">
-                Stream Processing — Python
-              </h3>
-              <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed">
-                Validate schemas, normalize timestamps, and enforce valid business state progressions in native async Python routines.
-              </p>
-            </div>
-          </motion.div>
-
-          {/* CARD 3: Reliable Storage — PostgreSQL */}
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: 0.15 }}
-            whileHover={{ y: -4 }}
-            className="group relative rounded-3xl bg-[#0D0D14]/80 backdrop-blur-xl border border-white/[0.08] hover:border-white/[0.18] p-5 sm:p-6 flex flex-col justify-between shadow-xl transition-all overflow-hidden"
-          >
-            {/* Top Interactive Visual Sandbox */}
-            <div className="relative h-[210px] w-full rounded-2xl bg-[#08080C] border border-white/[0.06] p-4 flex flex-col justify-between overflow-hidden mb-6">
-              {/* Warm amber glowing backdrop */}
-              <div className="pointer-events-none absolute -top-10 -right-6 w-44 h-44 rounded-full bg-gradient-to-br from-amber-500/30 to-orange-600/10 blur-2xl" />
-
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-white/[0.06] relative z-10">
-                <span className="font-mono text-[#A39E93] flex items-center gap-1.5">
-                  <Database className="w-3.5 h-3.5 text-amber-400" />
-                  PostgreSQL 16 Tables
-                </span>
-                <span className="font-mono text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                  Daily Partitioning
-                </span>
-              </div>
-
-              {/* Interactive Idempotency Box */}
-              <div className="p-3 rounded-xl bg-[#14141E] border border-white/[0.06] space-y-2 relative z-10">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-bold text-[#A39E93]">Constraint Rule</span>
-                  <button
-                    onClick={handleTestIdempotency}
-                    className="text-[10px] font-mono font-bold text-orange-400 hover:text-white bg-orange-500/15 hover:bg-orange-500/25 px-2 py-0.5 rounded border border-orange-500/30 transition-all"
-                    title="Click to test duplicate replay"
-                  >
-                    Test Duplicate Replay
-                  </button>
-                </div>
-                <div className="font-mono text-[11px] text-[#D4CEBF] bg-[#0A0A0E] p-2 rounded-lg border border-white/[0.04]">
-                  {idemStatus}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-[10px] text-[#A39E93] font-mono relative z-10 pt-1">
-                <span>Dead Letter Isolation</span>
-                <span className="text-emerald-400">1.8ms Commit Latency</span>
-              </div>
-            </div>
-
-            {/* Bottom Content */}
-            <div>
-              <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-amber-400 mb-3 group-hover:scale-105 group-hover:bg-amber-500/20 transition-all">
-                <Database className="w-4 h-4" />
-              </div>
-              <h3 className="text-lg font-bold text-[#F5F3EF] mb-1.5">
-                Reliable Storage — PostgreSQL
-              </h3>
-              <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed">
-                Persist clean events with idempotent upsert guarantees, automated daily table partitioning, and non-blocking DLQ isolation.
-              </p>
-            </div>
-          </motion.div>
-
-          {/* CARD 4: Live Analytics — Real-time dashboards */}
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: 0.2 }}
-            whileHover={{ y: -4 }}
-            className="group relative rounded-3xl bg-[#0D0D14]/80 backdrop-blur-xl border border-white/[0.08] hover:border-white/[0.18] p-5 sm:p-6 flex flex-col justify-between shadow-xl transition-all overflow-hidden"
-          >
-            {/* Top Interactive Visual Sandbox */}
-            <div 
-              onMouseEnter={() => setChartHovered(true)}
-              onMouseLeave={() => setChartHovered(false)}
-              className="relative h-[210px] w-full rounded-2xl bg-[#08080C] border border-white/[0.06] p-4 flex flex-col justify-between overflow-hidden mb-6 cursor-crosshair"
-            >
-              {/* Ethereal violet-amber glow */}
-              <div className="pointer-events-none absolute -top-8 -left-8 w-44 h-44 rounded-full bg-gradient-to-br from-indigo-500/25 to-orange-500/20 blur-2xl" />
-
-              <div className="flex items-center justify-between text-xs pb-1 border-b border-white/[0.06] relative z-10">
-                <span className="font-mono text-[#A39E93] flex items-center gap-1.5">
-                  <BarChart2 className="w-3.5 h-3.5 text-orange-400" />
-                  Live Operational Velocity
-                </span>
-                <span className="font-mono text-[10px] text-white font-bold">
-                  {chartValue.toLocaleString()}/s
-                </span>
-              </div>
-
-              {/* Real-time SVG Mini Chart with Floating Rating Card */}
-              <div className="relative h-24 w-full flex items-end justify-center z-10">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 200 60">
-                  <defs>
-                    <linearGradient id="featureChartGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#EA580C" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#EA580C" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d="M 0,45 Q 40,25 70,35 T 140,15 T 200,20 L 200,60 L 0,60 Z"
-                    fill="url(#featureChartGrad)"
-                  />
-                  <path
-                    d="M 0,45 Q 40,25 70,35 T 140,15 T 200,20"
-                    fill="none"
-                    stroke="#F97316"
-                    strokeWidth="2.5"
-                  />
-                  <circle cx="140" cy="15" r="3.5" fill="#FFFFFF" stroke="#EA580C" strokeWidth="2" />
-                </svg>
-
-                {/* Floating Rating Pill inspired by the reference design */}
-                <motion.div
-                  animate={{ y: chartHovered ? -5 : 0 }}
-                  className="absolute top-1 right-2 p-2 rounded-xl bg-[#181824]/95 border border-white/15 shadow-xl text-[10px]"
-                >
-                  <div className="flex items-center gap-1 text-[#E7D7BE] font-bold">
-                    <Sparkles className="w-3 h-3 text-orange-400" />
-                    <span>Pipeline SLA</span>
+              {/* Underlying Marketing Channels Window */}
+              <div className="w-full max-w-[320px] mx-auto p-3.5 rounded-2xl bg-[#101018]/90 border border-white/[0.08] backdrop-blur-md relative z-10">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-[#D4CEBF]">
+                    <span>Marketing Channels</span>
+                    <Info className="w-3 h-3 text-[#71717A]" />
                   </div>
-                  <div className="font-mono text-white text-[11px] font-bold mt-0.5">
-                    99.99% Uptime
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-[#A39E93] bg-white/[0.04] px-2 py-0.5 rounded-md">Details</span>
+                    <div className="flex items-center -space-x-1.5">
+                      <div className="w-4 h-4 rounded-full bg-orange-400 border border-black text-[7px] flex items-center justify-center font-bold">A</div>
+                      <div className="w-4 h-4 rounded-full bg-blue-400 border border-black text-[7px] flex items-center justify-center font-bold">B</div>
+                      <div className="w-4 h-4 rounded-full bg-purple-400 border border-black text-[7px] flex items-center justify-center font-bold">C</div>
+                      <span className="text-[8px] text-[#A39E93] pl-2 font-mono">99+</span>
+                    </div>
                   </div>
-                </motion.div>
+                </div>
+
+                <div className="flex items-baseline gap-2 mb-3">
+                  <span className="text-xl sm:text-2xl font-bold font-mono text-white">82%</span>
+                  <span className="text-[10px] font-semibold text-emerald-400 flex items-center">
+                    +21% vs last week
+                  </span>
+                </div>
+
+                {/* Mini Table */}
+                <div className="text-[10px] space-y-1 text-[#A39E93]">
+                  <div className="grid grid-cols-3 border-b border-white/[0.06] pb-1 font-mono text-[9px] uppercase">
+                    <span>Channels</span>
+                    <span>Metric</span>
+                    <span className="text-right">Total</span>
+                  </div>
+                  <div className="grid grid-cols-3 text-white">
+                    <span>Acquisition</span>
+                    <span className="font-mono text-[#D4CEBF]">$38.25</span>
+                    <span className="text-right text-emerald-400 flex items-center justify-end gap-0.5 font-mono">
+                      <ArrowUpRight className="w-2.5 h-2.5" /> +5
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 text-white">
+                    <span>Conversion</span>
+                    <span className="font-mono text-[#D4CEBF]">4.2 days</span>
+                    <span className="text-right text-amber-400 flex items-center justify-end gap-0.5 font-mono">
+                      <ArrowDownRight className="w-2.5 h-2.5" /> +3
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between text-[10px] text-[#A39E93] font-mono relative z-10 pt-1">
-                <span>WebSocket Push</span>
-                <span className="text-orange-400">Sub-5ms End-to-End</span>
-              </div>
+              {/* Elevated Floating Competitor Rating Card */}
+              <motion.div 
+                animate={{ y: [-2, 2, -2] }}
+                transition={{ repeat: Infinity, duration: 4.5, ease: 'easeInOut' }}
+                className="absolute bottom-3 right-3 sm:right-6 p-3 rounded-2xl bg-[#161624]/95 border border-white/20 backdrop-blur-xl shadow-2xl z-20"
+              >
+                <div className="flex items-center gap-1.5 mb-1 text-[11px] font-bold text-white">
+                  <div className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <User className="w-2.5 h-2.5" />
+                  </div>
+                  <span>Competitor Rating</span>
+                </div>
+                <div className="text-[9px] uppercase font-mono text-[#A39E93] mb-0.5">
+                  TOTAL RATING
+                </div>
+                <div className="text-xs font-bold text-white flex items-center gap-1">
+                  <span className="text-amber-400">★</span>
+                  <span>3.8/5</span>
+                  <span className="text-[10px] font-normal text-[#A39E93]">(Overall 4.5)</span>
+                </div>
+              </motion.div>
+
             </div>
 
-            {/* Bottom Content */}
-            <div>
-              <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-orange-400 mb-3 group-hover:scale-105 group-hover:bg-orange-500/20 transition-all">
-                <BarChart2 className="w-4 h-4" />
+            {/* Label and Description */}
+            <div className="mt-5">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Layers className="w-4 h-4 text-white/90" />
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  Competitor Analysis
+                </h3>
               </div>
-              <h3 className="text-lg font-bold text-[#F5F3EF] mb-1.5">
-                Live Analytics — Real-time dashboards
-              </h3>
-              <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed">
-                Stream real-time throughput metrics, consumer lag diagnostics, and cohort conversion telemetry straight to engineering consoles.
+              <p className="text-xs sm:text-sm text-[#A39E93] leading-relaxed">
+                Track brand visibility scores across AI platforms and measure share of voice.
               </p>
             </div>
           </motion.div>
 
-          {/* CARD 5: Monitoring & Alerts — Pipeline health and latency */}
+          {/* ============================================================== */}
+          {/* CARD 3 (Bottom Left): Competitor Analysis (Electric Blue Beam) */}
+          {/* ============================================================== */}
           <motion.div
-            initial={{ opacity: 0, y: 15 }}
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: 0.25 }}
-            whileHover={{ y: -4 }}
-            className="group relative rounded-3xl bg-[#0D0D14]/80 backdrop-blur-xl border border-white/[0.08] hover:border-white/[0.18] p-5 sm:p-6 flex flex-col justify-between shadow-xl transition-all overflow-hidden"
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="rounded-3xl bg-[#0C0C12]/90 border border-white/[0.08] p-5 sm:p-6 flex flex-col justify-between hover:border-white/20 transition-all shadow-[0_20px_50px_rgba(0,0,0,0.7)] group"
           >
-            {/* Top Interactive Visual Sandbox */}
-            <div className="relative h-[210px] w-full rounded-2xl bg-[#08080C] border border-white/[0.06] p-4 flex flex-col justify-between overflow-hidden mb-6">
-              {/* Warm sunset lighting aura */}
-              <div className="pointer-events-none absolute -top-8 -right-8 w-44 h-44 rounded-full bg-gradient-to-br from-rose-500/25 to-orange-500/20 blur-2xl" />
-
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-white/[0.06] relative z-10">
-                <span className="font-mono text-[#A39E93] flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                  Health & Latency Sentry
-                </span>
-                <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full border ${
-                  alertActive 
-                    ? 'text-rose-400 bg-rose-500/10 border-rose-500/30' 
-                    : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
-                }`}>
-                  {alertActive ? 'Degraded Alert' : 'Healthy 0 Lag'}
-                </span>
+            {/* Visual Screen with intense electric blue lightning streak */}
+            <div className="w-full h-[250px] sm:h-[270px] rounded-2xl bg-[#07070A] border border-white/[0.06] relative overflow-hidden flex flex-col justify-center items-center p-4">
+              
+              {/* Diagonal Electric Blue Beam */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                <div className="w-48 h-80 -rotate-45 bg-gradient-to-b from-blue-400/40 via-cyan-400/25 to-transparent blur-2xl opacity-90" />
+                <div className="w-16 h-96 -rotate-45 bg-white/25 blur-lg" />
               </div>
 
-              {/* Latency and Alert Interactive Notification */}
-              <div className="space-y-2 relative z-10">
-                <div className="p-2.5 rounded-xl bg-[#14141E] border border-white/[0.06] flex items-center justify-between">
-                  <span className="text-[11px] text-[#A39E93]">p95 End-to-End Latency:</span>
-                  <span className="font-mono text-sm font-bold text-white">{latencyP95}ms</span>
+              {/* Faded Background Text Rows */}
+              <div className="w-full max-w-[320px] space-y-4 opacity-25 select-none text-[11px] font-medium text-[#D4CEBF] relative z-0">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                  <span className="truncate">Your competitor announced a 45M seed..</span>
                 </div>
-
-                <div 
-                  onClick={() => setAlertActive(!alertActive)}
-                  className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                    alertActive 
-                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' 
-                      : 'bg-white/[0.02] border-white/[0.06] text-[#D4CEBF] hover:bg-white/[0.04]'
-                  }`}
-                >
-                  <span className="text-[11px] font-medium">
-                    {alertActive ? 'Warning: High Lag Spike Detected' : 'DLQ Quarantine: 0 Errors'}
-                  </span>
-                  <span className="text-[10px] font-mono underline text-orange-400">
-                    {alertActive ? 'Resolve' : 'Test Alert'}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                  <span className="truncate">Track AI citations and measure brand visibility..</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                  <span className="truncate">Customers reached out within six months..</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-[10px] text-[#A39E93] font-mono relative z-10 pt-1">
-                <span>Three-Timestamp Tracing</span>
-                <span className="text-emerald-400">Continuous Heartbeat</span>
-              </div>
+              {/* Elevated Floating Foreground Glass Pill */}
+              <motion.div 
+                animate={{ y: [-2, 2, -2] }}
+                transition={{ repeat: Infinity, duration: 4.8, ease: 'easeInOut' }}
+                className="absolute z-20 px-4 py-3 rounded-2xl bg-[#12121C]/90 border border-white/20 backdrop-blur-xl shadow-[0_15px_35px_rgba(0,0,0,0.8),0_0_20px_rgba(59,130,246,0.2)] flex items-center gap-2.5 max-w-[320px] w-[90%]"
+              >
+                <Sparkles className="w-4 h-4 text-white shrink-0" />
+                <span className="text-xs font-semibold text-white truncate">
+                  Investors are flipping through your deck faster....
+                </span>
+              </motion.div>
+
             </div>
 
-            {/* Bottom Content */}
-            <div>
-              <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-emerald-400 mb-3 group-hover:scale-105 group-hover:bg-emerald-500/20 transition-all">
-                <Activity className="w-4 h-4" />
+            {/* Label and Description */}
+            <div className="mt-5">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Layers className="w-4 h-4 text-white/90" />
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  Competitor Analysis
+                </h3>
               </div>
-              <h3 className="text-lg font-bold text-[#F5F3EF] mb-1.5">
-                Monitoring & Alerts — Health and latency
-              </h3>
-              <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed">
-                Isolate processing anomalies with automated dead-letter queue classification and proactive consumer lag alerts.
+              <p className="text-xs sm:text-sm text-[#A39E93] leading-relaxed">
+                Track brand visibility scores across AI platforms and measure share of voice.
               </p>
             </div>
           </motion.div>
 
-          {/* CARD 6: Scalable & Modular — Docker-based deployment */}
+          {/* ============================================================== */}
+          {/* CARD 4 (Bottom Right): Prompt Intelligence (Interactive AI)   */}
+          {/* ============================================================== */}
           <motion.div
-            initial={{ opacity: 0, y: 15 }}
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-            whileHover={{ y: -4 }}
-            className="group relative rounded-3xl bg-[#0D0D14]/80 backdrop-blur-xl border border-white/[0.08] hover:border-white/[0.18] p-5 sm:p-6 flex flex-col justify-between shadow-xl transition-all overflow-hidden"
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="rounded-3xl bg-[#0C0C12]/90 border border-white/[0.08] p-5 sm:p-6 flex flex-col justify-between hover:border-white/20 transition-all shadow-[0_20px_50px_rgba(0,0,0,0.7)] group"
           >
-            {/* Top Interactive Visual Sandbox */}
-            <div className="relative h-[210px] w-full rounded-2xl bg-[#08080C] border border-white/[0.06] p-4 flex flex-col justify-between overflow-hidden mb-6">
-              {/* Ethereal deep amber & cyan lighting beam */}
-              <div className="pointer-events-none absolute -bottom-8 -right-8 w-44 h-44 rounded-full bg-gradient-to-tl from-cyan-500/20 via-orange-500/25 to-transparent blur-2xl" />
+            {/* Visual Screen with Horizon Glow & Interactive Prompt Bar */}
+            <div className="w-full h-[250px] sm:h-[270px] rounded-2xl bg-[#07070A] border border-white/[0.06] relative overflow-hidden flex flex-col justify-center items-center p-4">
+              
+              {/* Dual Horizon Glow (Warm Amber on left, Electric Blue on right) */}
+              <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-44 h-44 rounded-full bg-orange-500/25 blur-3xl pointer-events-none" />
+              <div className="absolute top-1/2 right-1/4 -translate-y-1/2 w-44 h-44 rounded-full bg-blue-500/25 blur-3xl pointer-events-none" />
+              
+              {/* Subtle digital dot matrix grid background */}
+              <div 
+                className="absolute inset-0 opacity-[0.05] pointer-events-none"
+                style={{
+                  backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
+                  backgroundSize: '16px 16px'
+                }}
+              />
 
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-white/[0.06] relative z-10">
-                <span className="font-mono text-[#A39E93] flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-orange-400" />
-                  Docker Compose Swarm
-                </span>
-                <span className="font-mono text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
-                  4 Services
-                </span>
-              </div>
+              {/* Main Prompt Bar Container */}
+              <div className="w-full max-w-[320px] rounded-2xl bg-[#12121A]/95 border border-white/15 p-3 backdrop-blur-xl shadow-2xl relative z-10">
+                
+                {/* Input Text Area */}
+                <div className="mb-2.5">
+                  <input
+                    type="text"
+                    value={promptText}
+                    onChange={(e) => setPromptText(e.target.value)}
+                    placeholder="Ask anything..."
+                    className="w-full bg-transparent text-xs text-white placeholder-[#71717A] focus:outline-none font-sans"
+                  />
+                </div>
 
-              {/* Service Container Pills */}
-              <div className="grid grid-cols-2 gap-2 relative z-10">
-                {[
-                  { id: 'kafka', label: 'kafka:9092' },
-                  { id: 'consumer', label: 'consumer-py' },
-                  { id: 'postgres', label: 'postgres:5432' },
-                  { id: 'fastapi', label: 'fastapi-app' },
-                ].map((svc) => {
-                  const isUp = activeContainers[svc.id]
-                  return (
-                    <div
-                      key={svc.id}
-                      onClick={() => toggleContainer(svc.id)}
-                      className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                        isUp
-                          ? 'bg-[#14141E] border-white/10 text-white'
-                          : 'bg-white/[0.01] border-white/[0.04] text-[#71717A]'
-                      }`}
+                {/* Bottom Toolbar matching screenshot */}
+                <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
+                  <div className="flex items-center gap-1.5">
+                    {/* + Button */}
+                    <button className="w-5 h-5 rounded-md bg-white/[0.06] hover:bg-white/[0.12] text-white flex items-center justify-center transition-all">
+                      <Plus className="w-3 h-3 text-[#A39E93]" />
+                    </button>
+
+                    {/* Mode selector */}
+                    <div className="px-2 py-0.5 rounded-md text-[10px] text-[#A39E93] bg-white/[0.04] flex items-center gap-1">
+                      <span>Normal</span>
+                      <ChevronDown className="w-2.5 h-2.5" />
+                    </div>
+
+                    {/* DeepThink Active Selector */}
+                    <button
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      className="px-2 py-0.5 rounded-md text-[10px] font-semibold text-white bg-indigo-500/20 border border-indigo-500/40 flex items-center gap-1 shadow-sm"
                     >
-                      <span className="font-mono text-[10px] truncate">{svc.label}</span>
-                      <span className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-emerald-400' : 'bg-rose-500'}`} />
-                    </div>
-                  )
-                })}
+                      <span>{activeReasoning}</span>
+                      {isDropdownOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {/* Voice Icon */}
+                    <button className="px-1.5 py-0.5 rounded-md text-[10px] text-[#A39E93] hover:text-white flex items-center gap-1">
+                      <Mic className="w-2.5 h-2.5" />
+                      <span>Voice</span>
+                    </button>
+
+                    {/* Send Button */}
+                    <button className="w-6 h-6 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-all shadow-md">
+                      <Send className="w-3 h-3 translate-x-[1px]" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Open Dropdown Menu Anchored Below DeepThink */}
+                <AnimatePresence>
+                  {isDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 5 }}
+                      className="absolute left-16 top-full mt-1.5 w-36 p-1.5 rounded-xl bg-[#181826] border border-white/15 shadow-2xl z-30 space-y-0.5 text-[10.5px]"
+                    >
+                      {reasoningOptions.map((opt) => {
+                        const isSelected = activeReasoning === opt.label
+                        return (
+                          <div
+                            key={opt.id}
+                            onClick={() => {
+                              setActiveReasoning(opt.label)
+                              setIsDropdownOpen(false)
+                            }}
+                            className={`px-2 py-1.5 rounded-lg flex items-center justify-between cursor-pointer transition-all ${
+                              isSelected ? 'bg-indigo-600/30 text-white font-semibold' : 'text-[#A39E93] hover:bg-white/5 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span>{opt.icon}</span>
+                              <span>{opt.label}</span>
+                            </div>
+                            {isSelected && <Check className="w-3 h-3 text-indigo-400" />}
+                          </div>
+                        )
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
               </div>
 
-              <div className="flex items-center justify-between text-[10px] text-[#A39E93] font-mono relative z-10 pt-1">
-                <span>Isolated Network</span>
-                <span className="text-orange-400">Single-Command Boot</span>
-              </div>
             </div>
 
-            {/* Bottom Content */}
-            <div>
-              <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-orange-400 mb-3 group-hover:scale-105 group-hover:bg-orange-500/20 transition-all">
-                <Layers className="w-4 h-4" />
+            {/* Label and Description */}
+            <div className="mt-5">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Layers className="w-4 h-4 text-white/90" />
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  Prompt Intelligence
+                </h3>
               </div>
-              <h3 className="text-lg font-bold text-[#F5F3EF] mb-1.5">
-                Scalable & Modular — Docker-based
-              </h3>
-              <p className="text-xs sm:text-[13px] text-[#A39E93] leading-relaxed">
-                Boot the entire streaming topology with one command using reproducible Docker containers and built-in cluster validation checks.
+              <p className="text-xs sm:text-sm text-[#A39E93] leading-relaxed">
+                Discover high-value prompts to target and optimize your AI search strategy.
               </p>
             </div>
           </motion.div>
