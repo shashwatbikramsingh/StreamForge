@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=80,<85"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "streamforge"
+version = "0.1.0"
+description = "Real-time event streaming and analytics platform for synthetic ride-booking events."
+requires-python = ">=3.13,<3.15"
+dependencies = [
+    "pydantic>=2.14,<3",
+    "confluent-kafka>=2.16,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<10",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["streamforge*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
