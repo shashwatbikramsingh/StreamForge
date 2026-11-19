@@ -34,20 +34,42 @@ const DropboxIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }
 export const FeaturesGrid: React.FC = () => {
   // Card 1: Integrations state
   const [integrations, setIntegrations] = useState([
-    { name: 'Slack', desc: 'Sent messages & notifications', connected: true, icon: SlackIcon },
-    { name: 'Notion', desc: 'Create and update pages', connected: false, icon: NotionIcon },
-    { name: 'Dropbox', desc: 'Create and update pages', connected: false, icon: DropboxIcon },
+    { name: 'Slack', desc: 'Sent messages & notifications', stat: '1,280 msgs pushed', connected: true, icon: SlackIcon },
+    { name: 'Notion', desc: 'Create and update pages', stat: '24 docs logged', connected: false, icon: NotionIcon },
+    { name: 'Dropbox', desc: 'Audit sinks & archival', stat: 'Ready to connect', connected: false, icon: DropboxIcon },
   ])
 
   // Card 4: Interactive Prompt Intelligence State
   const [activeReasoning, setActiveReasoning] = useState('DeepThink')
-  const [isDropdownOpen, setIsDropdownOpen] = useState(true)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [promptText, setPromptText] = useState('')
+  const [aiResponse, setAiResponse] = useState<string | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const toggleConnect = (index: number) => {
     setIntegrations((prev) => 
       prev.map((item, idx) => idx === index ? { ...item, connected: !item.connected } : item)
     )
+  }
+
+  const handleSendPrompt = (textToSend?: string) => {
+    const query = (textToSend || promptText).trim()
+    if (!query) return
+
+    setIsGenerating(true)
+    setAiResponse(null)
+    setIsDropdownOpen(false)
+
+    setTimeout(() => {
+      let reply = `Stream intelligence: Nominal telemetry on ${query}. 12,840 evt/s at 2.8ms latency across 4 partitions with 0 consumer lag.`
+      if (query.toLowerCase().includes('surge') || query.toLowerCase().includes('koramangala')) {
+        reply = 'Surge Intelligence: Koramangala ↔ Indiranagar demand elevated to 1.35x. Murmur2 driver partition P-02 scaled.'
+      } else if (query.toLowerCase().includes('lag') || query.toLowerCase().includes('kafka')) {
+        reply = 'Partition Telemetry: 4 active KRaft brokers reporting 0 consumer lag. Monotonic offset 94,281 confirmed.'
+      }
+      setAiResponse(reply)
+      setIsGenerating(false)
+    }, 600)
   }
 
   const reasoningOptions = [
@@ -338,22 +360,53 @@ export const FeaturesGrid: React.FC = () => {
               {/* Main Prompt Bar Container */}
               <div className="w-full max-w-[320px] rounded-2xl bg-[#12121A]/95 border border-white/15 p-3 backdrop-blur-xl shadow-2xl relative z-10">
                 
+                {/* Simulated AI Streaming Response Box */}
+                <AnimatePresence>
+                  {aiResponse && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mb-2 p-2 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-[10px] text-indigo-200 flex items-start gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 leading-snug">
+                        {aiResponse}
+                      </div>
+                      <button 
+                        onClick={() => setAiResponse(null)}
+                        className="text-[#A39E93] hover:text-white text-xs leading-none"
+                      >
+                        ×
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Input Text Area */}
-                <div className="mb-2.5">
+                <div className="mb-2.5 flex items-center gap-1.5">
                   <input
                     type="text"
                     value={promptText}
                     onChange={(e) => setPromptText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSendPrompt() }}
                     placeholder="Ask anything..."
                     className="w-full bg-transparent text-xs text-white placeholder-[#71717A] focus:outline-none font-sans"
                   />
+                  {isGenerating && (
+                    <div className="w-3 h-3 rounded-full border border-indigo-400 border-t-transparent animate-spin shrink-0" />
+                  )}
                 </div>
 
                 {/* Bottom Toolbar matching screenshot */}
                 <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
                   <div className="flex items-center gap-1.5">
                     {/* + Button */}
-                    <button className="w-5 h-5 rounded-md bg-white/[0.06] hover:bg-white/[0.12] text-white flex items-center justify-center transition-all">
+                    <button 
+                      onClick={() => handleSendPrompt("Evaluate Kafka partition P-02")}
+                      title="Quick telemetry query"
+                      className="w-5 h-5 rounded-md bg-white/[0.06] hover:bg-white/[0.12] text-white flex items-center justify-center transition-all"
+                    >
                       <Plus className="w-3 h-3 text-[#A39E93]" />
                     </button>
 
@@ -375,13 +428,19 @@ export const FeaturesGrid: React.FC = () => {
 
                   <div className="flex items-center gap-1.5">
                     {/* Voice Icon */}
-                    <button className="px-1.5 py-0.5 rounded-md text-[10px] text-[#A39E93] hover:text-white flex items-center gap-1">
+                    <button 
+                      onClick={() => handleSendPrompt("Analyze Bengaluru surge trends")}
+                      className="px-1.5 py-0.5 rounded-md text-[10px] text-[#A39E93] hover:text-white flex items-center gap-1"
+                    >
                       <Mic className="w-2.5 h-2.5" />
                       <span>Voice</span>
                     </button>
 
                     {/* Send Button */}
-                    <button className="w-6 h-6 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-all shadow-md">
+                    <button 
+                      onClick={() => handleSendPrompt()}
+                      className="w-6 h-6 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-all shadow-md"
+                    >
                       <Send className="w-3 h-3 translate-x-[1px]" />
                     </button>
                   </div>

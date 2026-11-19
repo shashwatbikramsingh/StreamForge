@@ -36,36 +36,41 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
   const [avgLatency, setAvgLatency] = useState(320)
   const [selectedMetric, setSelectedMetric] = useState<'throughput' | 'rides' | 'latency'>('throughput')
 
+  const BENGALURU_ZONES = [
+    'Koramangala', 'Indiranagar', 'Whitefield', 'Electronic City',
+    'HSR Layout', 'Jayanagar', 'MG Road', 'Hebbal', 'Marathahalli', 'BTM Layout'
+  ]
+
   const [events, setEvents] = useState<StreamEvent[]>([
     { 
       id: 'EVT-94281', 
-      type: 'ride_booked', 
+      type: 'ride_requested', 
       status: 'Success', 
       time: '11:00:24', 
       partition: 'P-02', 
       latency: '4.2ms',
       dedupHash: '0x8f2a...c4e1',
-      payload: { rider_id: 'usr_8921', driver_id: 'drv_3310', pickup_zone: 'SFO-Terminal 2', fare_estimate: 34.50, surge: 1.0 }
+      payload: { rider_id: 'usr_8921', pickup_zone: 'Koramangala', dropoff_zone: 'Indiranagar', fare_estimate_inr: 285.50, surge: 1.25 }
     },
     { 
       id: 'EVT-94280', 
-      type: 'payment', 
+      type: 'ride_accepted', 
       status: 'Success', 
       time: '10:59:58', 
       partition: 'P-01', 
       latency: '3.8ms',
       dedupHash: '0x3c71...9a0b',
-      payload: { transaction_id: 'tx_991827', amount_cents: 4250, currency: 'USD', gateway: 'Stripe KRaft', idempotent: true }
+      payload: { ride_id: 'rd_9428', driver_id: 'drv_3310', eta_minutes: 4, vehicle: 'Prime EV' }
     },
     { 
       id: 'EVT-94289', 
-      type: 'user_login', 
+      type: 'ride_started', 
       status: 'Success', 
       time: '10:59:47', 
       partition: 'P-03', 
-      latency: '5.1ms',
+      latency: '4.1ms',
       dedupHash: '0x1b4e...78fa',
-      payload: { user_id: 'usr_4402', auth_provider: 'OAuth2/JWT', mfa_verified: true, client_ip: '198.51.100.42' }
+      payload: { ride_id: 'rd_9428', driver_id: 'drv_3310', start_odometer_km: 14208.50, pickup_zone: 'Koramangala' }
     },
     { 
       id: 'EVT-94288', 
@@ -75,53 +80,53 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
       partition: 'P-00 (DLQ)', 
       latency: '12.4ms',
       dedupHash: '0xde01...dead',
-      payload: { error_reason: 'SchemaValidationError: Missing coordinate latitude', quarantine_topic: 'streamforge.dlq.v1', retry_count: 3 }
+      payload: { error_reason: 'invalid_state_transition: CANCELLED rejected for COMPLETED ride', quarantine_topic: 'streamforge.dlq.v1', retry_count: 3 }
     },
     { 
       id: 'EVT-94287', 
-      type: 'ride_started', 
+      type: 'ride_completed', 
       status: 'Success', 
       time: '10:59:15', 
       partition: 'P-02', 
       latency: '4.0ms',
       dedupHash: '0x55aa...1122',
-      payload: { ride_id: 'rd_7721', start_time: '2026-11-14T10:59:15Z', vehicle_fleet_id: 'v_901' }
+      payload: { ride_id: 'rd_7721', driver_id: 'drv_1109', final_fare_inr: 340.00, distance_km: 11.40, duration_seconds: 1380 }
     },
     { 
       id: 'EVT-94286', 
-      type: 'payment', 
+      type: 'ride_requested', 
       status: 'Success', 
       time: '10:58:54', 
       partition: 'P-01', 
       latency: '3.5ms',
       dedupHash: '0x77ee...4433',
-      payload: { transaction_id: 'tx_991826', amount_cents: 1875, currency: 'USD', gateway: 'Stripe KRaft', idempotent: true }
+      payload: { rider_id: 'usr_3110', pickup_zone: 'Whitefield', dropoff_zone: 'MG Road', fare_estimate_inr: 450.00, surge: 1.40 }
     },
     { 
       id: 'EVT-94285', 
-      type: 'ride_booked', 
+      type: 'ride_cancelled', 
       status: 'Success', 
       time: '10:58:31', 
       partition: 'P-03', 
       latency: '4.6ms',
       dedupHash: '0x99dd...7766',
-      payload: { rider_id: 'usr_3110', driver_id: 'drv_1109', pickup_zone: 'JFK-T4', fare_estimate: 68.00, surge: 1.4 }
+      payload: { ride_id: 'rd_7718', cancelled_by: 'rider', cancellation_reason: 'Driver delayed at pickup hotspot', fee_inr: 0.00 }
     },
     { 
       id: 'EVT-94284', 
-      type: 'user_login', 
+      type: 'ride_accepted', 
       status: 'Success', 
       time: '10:58:10', 
       partition: 'P-02', 
       latency: '4.9ms',
       dedupHash: '0x22bb...8899',
-      payload: { user_id: 'usr_1092', auth_provider: 'OAuth2/JWT', mfa_verified: true, client_ip: '203.0.113.19' }
+      payload: { ride_id: 'rd_9410', driver_id: 'drv_9012', eta_minutes: 3, vehicle: 'EV Hatchback' }
     }
   ])
 
-  // Helper to generate realistic synthetic events
+  // Helper to generate realistic synthetic events with Bengaluru zones
   const createSyntheticEvent = (forcedType?: string, forcedFailed?: boolean): StreamEvent => {
-    const types = ['ride_booked', 'payment', 'ride_completed', 'user_login', 'ride_started']
+    const types = ['ride_requested', 'ride_accepted', 'ride_started', 'ride_completed', 'ride_cancelled']
     const type = forcedType || types[Math.floor(Math.random() * types.length)]
     const isFailed = forcedFailed !== undefined ? forcedFailed : Math.random() < 0.12
     const now = new Date()
@@ -129,35 +134,63 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
     const idNum = Math.floor(10000 + Math.random() * 90000)
     const partitionNum = Math.floor(Math.random() * 4)
 
+    // Select two distinct Bengaluru zones
+    const pIdx = Math.floor(Math.random() * BENGALURU_ZONES.length)
+    let dIdx = (pIdx + 1 + Math.floor(Math.random() * (BENGALURU_ZONES.length - 1))) % BENGALURU_ZONES.length
+    const pickupZone = BENGALURU_ZONES[pIdx]
+    const dropoffZone = BENGALURU_ZONES[dIdx]
+
     let payload: Record<string, any> = {}
     if (isFailed) {
+      const dlqReasons = [
+        'invalid_state_transition: CANCELLED rejected for COMPLETED ride',
+        `SchemaValidationError: Pickup and dropoff zones cannot match (${pickupZone} == ${pickupZone})`,
+        'TimestampOutOfOrderError: produced_at precedes occurred_at',
+        'MalformedProtobufPayload: invalid magic bytes at byte offset 0'
+      ]
       payload = {
-        error_reason: 'SchemaValidationError: Corrupted protobuf timestamp',
+        error_reason: dlqReasons[Math.floor(Math.random() * dlqReasons.length)],
         quarantine_topic: 'streamforge.dlq.v1',
         retry_count: 3,
         isolated_at: now.toISOString()
       }
-    } else if (type.includes('payment')) {
+    } else if (type === 'ride_accepted') {
       payload = {
-        transaction_id: `tx_${idNum}`,
-        amount_cents: Math.floor(1200 + Math.random() * 8000),
-        currency: 'USD',
-        gateway: 'Stripe KRaft',
-        idempotent: true
+        ride_id: `rd_${idNum}`,
+        driver_id: `drv_${Math.floor(1000 + Math.random() * 9000)}`,
+        eta_minutes: Math.floor(2 + Math.random() * 8),
+        vehicle_tier: 'Prime EV'
       }
-    } else if (type.includes('login')) {
+    } else if (type === 'ride_started') {
       payload = {
-        user_id: `usr_${idNum}`,
-        auth_provider: 'OAuth2/JWT',
-        mfa_verified: true,
-        client_ip: `198.51.100.${Math.floor(Math.random() * 250)}`
+        ride_id: `rd_${idNum}`,
+        driver_id: `drv_${Math.floor(1000 + Math.random() * 9000)}`,
+        start_odometer_km: +(12000 + Math.random() * 5000).toFixed(1),
+        pickup_zone: pickupZone
+      }
+    } else if (type === 'ride_cancelled') {
+      payload = {
+        ride_id: `rd_${idNum}`,
+        cancelled_by: Math.random() > 0.5 ? 'rider' : 'driver',
+        cancellation_reason: 'Rider delayed at pickup hotspot',
+        cancellation_fee_inr: 45.00
+      }
+    } else if (type === 'ride_completed') {
+      payload = {
+        ride_id: `rd_${idNum}`,
+        driver_id: `drv_${Math.floor(1000 + Math.random() * 9000)}`,
+        final_fare_inr: +(180 + Math.random() * 380).toFixed(2),
+        distance_km: +(4 + Math.random() * 16).toFixed(1),
+        duration_seconds: Math.floor(600 + Math.random() * 1800)
       }
     } else {
       payload = {
         ride_id: `rd_${idNum}`,
         rider_id: `usr_${Math.floor(1000 + Math.random() * 9000)}`,
-        fare_usd: +(15 + Math.random() * 45).toFixed(2),
-        surge_multiplier: +(1.0 + Math.random() * 0.8).toFixed(1)
+        pickup_zone: pickupZone,
+        dropoff_zone: dropoffZone,
+        fare_estimate_inr: +(160 + Math.random() * 320).toFixed(2),
+        surge_multiplier: +(1.0 + Math.random() * 0.5).toFixed(2)
       }
     }
 
@@ -167,7 +200,7 @@ export const ProductPreview: React.FC<ProductPreviewProps> = ({ onViewDashboard 
       status: isFailed ? 'Failed' : 'Success',
       time: timeStr,
       partition: isFailed ? 'P-00 (DLQ)' : `P-0${partitionNum}`,
-      latency: `${(3 + Math.random() * 5).toFixed(1)}ms`,
+      latency: `${(2.8 + Math.random() * 3.5).toFixed(1)}ms`,
       dedupHash: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
       payload
     }
