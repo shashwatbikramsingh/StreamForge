@@ -16,15 +16,18 @@ def make_test_event(ride_id="RIDE-TEST-100", event_id="EVT-TEST-100") -> RideEve
     now = datetime.now(timezone.utc)
     return RideEvent(
         event_id=event_id,
-        ride_id=ride_id,
         event_type=RideEventType.REQUESTED,
+        schema_version=1,
         occurred_at=now,
         produced_at=now,
+        producer="streamforge-test",
         payload=RideRequestedPayload(
+            ride_id=ride_id,
             rider_id="usr_5501",
-            pickup_zone=BengaluruZone.KORAMANGALA,
-            dropoff_zone=BengaluruZone.INDIRANAGAR,
-            estimated_fare=Decimal("220.00"),
+            pickup_city=BengaluruZone.KORAMANGALA,
+            dropoff_city=BengaluruZone.INDIRANAGAR,
+            fare_amount="220.00",
+            currency="INR",
         ),
     )
 

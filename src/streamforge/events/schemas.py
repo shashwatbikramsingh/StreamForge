@@ -1,27 +1,58 @@
-"""
-StreamForge — Pydantic Event Schemas & Domain Models
-Specification: streamforge_docs/adr/0001-mvp-baseline-decisions.md & RULES.md
-
-Governs typed schema validation, UTC timezone-aware timestamps,
-monetary decimal precision, and Bengaluru geography invariants.
-"""
+"""StreamForge event schemas following PRD v1.0 and ADR 0001."""
 
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum, IntEnum
-from typing import Literal, Union, Dict, Any, Optional
-from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
-
+from typing import Annotated, Any, Literal, Union, Dict, Optional
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    PlainSerializer,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from streamforge.events.geography import BengaluruZone
 
 
+def validate_money_input(value: Any) -> Any:
+    """Accept decimal strings from JSON or Decimal values from Python."""
+    if isinstance(value, (float, int)) and not isinstance(value, bool):
+        raise ValueError(
+            "Money must be provided as a decimal string or Decimal, "
+            "not a float or integer."
+        )
+    if not isinstance(value, (str, Decimal)):
+        raise ValueError(
+            "Money must be provided as a decimal string or Decimal, "
+            "not a float or integer."
+        )
+    return value
+
+
+PositiveMoney = Annotated[
+    Decimal,
+    BeforeValidator(validate_money_input),
+    Field(gt=Decimal("0"), decimal_places=2),
+    PlainSerializer(lambda x: f"{x:.2f}", return_type=str),
+]
+
+NonNegativeMoney = Annotated[
+    Decimal,
+    BeforeValidator(validate_money_input),
+    Field(ge=Decimal("0"), decimal_places=2),
+    PlainSerializer(lambda x: f"{x:.2f}", return_type=str),
+]
+
+
 class RideEventType(str, Enum):
-    """Supported ride lifecycle event types."""
-    REQUESTED = "ride_requested"
-    ACCEPTED = "ride_accepted"
-    STARTED = "ride_started"
-    COMPLETED = "ride_completed"
-    CANCELLED = "ride_cancelled"
+    """Supported ride lifecycle event types following PRD v1.0."""
+    REQUESTED = "ride.requested"
+    ACCEPTED = "ride.accepted"
+    STARTED = "ride.started"
+    COMPLETED = "ride.completed"
+    CANCELLED = "ride.cancelled"
 
 
 class RideLifecycleRank(IntEnum):
@@ -55,23 +86,41 @@ class RideRequestedPayload(BaseModel):
     """Payload emitted when a rider books a trip."""
     model_config = ConfigDict(extra="forbid")
 
+    ride_id: str = Field(..., min_length=3, max_length=64, description="Business ride identifier")
     rider_id: str = Field(..., min_length=3, max_length=64, description="Unique rider identifier")
-    pickup_zone: BengaluruZone = Field(..., description="Synthetic Bengaluru pickup location")
-    dropoff_zone: BengaluruZone = Field(..., description="Synthetic Bengaluru dropoff location")
-    estimated_fare: Decimal = Field(..., gt=0, decimal_places=2, description="Estimated trip fare in INR")
-    surge_multiplier: Decimal = Field(default=Decimal("1.00"), ge=Decimal("1.00"), le=Decimal("5.00"), decimal_places=2)
+    driver_id: Optional[str] = Field(default=None, description="Assigned driver identifier")
+    pickup_city: BengaluruZone = Field(..., description="Synthetic Bengaluru pickup location")
+    dropoff_city: BengaluruZone = Field(..., description="Synthetic Bengaluru dropoff location")
+    fare_amount: PositiveMoney = Field(..., description="Estimated trip fare in INR")
+    currency: Literal["INR"] = Field(default="INR", description="Currency code")
 
     @model_validator(mode="after")
     def validate_different_zones(self) -> "RideRequestedPayload":
-        if self.pickup_zone == self.dropoff_zone:
-            raise ValueError(f"Pickup and dropoff zones must differ: got {self.pickup_zone.value}")
+        if self.pickup_city == self.dropoff_city:
+            raise ValueError(f"Pickup and dropoff zones must differ: got {self.pickup_city.value}")
         return self
+
+    @property
+    def pickup_zone(self) -> BengaluruZone:
+        """Backward-compatible property for pickup zone."""
+        return self.pickup_city
+
+    @property
+    def dropoff_zone(self) -> BengaluruZone:
+        """Backward-compatible property for dropoff zone."""
+        return self.dropoff_city
+
+    @property
+    def estimated_fare(self) -> Decimal:
+        """Backward-compatible property for estimated fare."""
+        return self.fare_amount
 
 
 class RideAcceptedPayload(BaseModel):
     """Payload emitted when a driver accepts a ride dispatch."""
     model_config = ConfigDict(extra="forbid")
 
+    ride_id: str = Field(..., min_length=3, max_length=64, description="Business ride identifier")
     driver_id: str = Field(..., min_length=3, max_length=64, description="Assigned driver identifier")
     eta_minutes: int = Field(..., ge=1, le=120, description="Estimated arrival time in minutes")
 
@@ -80,7 +129,8 @@ class RideStartedPayload(BaseModel):
     """Payload emitted when the driver picks up the rider and starts the trip."""
     model_config = ConfigDict(extra="forbid")
 
-    driver_id: str = Field(..., min_length=3, max_length=64)
+    ride_id: str = Field(..., min_length=3, max_length=64, description="Business ride identifier")
+    driver_id: str = Field(..., min_length=3, max_length=64, description="Assigned driver identifier")
     start_odometer_km: Decimal = Field(..., ge=0, decimal_places=2, description="Vehicle initial odometer")
 
 
@@ -88,19 +138,28 @@ class RideCompletedPayload(BaseModel):
     """Payload emitted upon successful trip termination."""
     model_config = ConfigDict(extra="forbid")
 
-    driver_id: str = Field(..., min_length=3, max_length=64)
-    final_fare: Decimal = Field(..., gt=0, decimal_places=2, description="Final billed fare in INR")
+    ride_id: str = Field(..., min_length=3, max_length=64, description="Business ride identifier")
+    driver_id: str = Field(..., min_length=3, max_length=64, description="Assigned driver identifier")
+    fare_amount: PositiveMoney = Field(..., description="Final billed fare in INR")
     distance_km: Decimal = Field(..., gt=0, decimal_places=2, description="Trip distance in km")
     duration_seconds: int = Field(..., gt=0, description="Trip total duration in seconds")
+    currency: Literal["INR"] = Field(default="INR", description="Currency code")
+
+    @property
+    def final_fare(self) -> Decimal:
+        """Backward-compatible property for final fare."""
+        return self.fare_amount
 
 
 class RideCancelledPayload(BaseModel):
     """Payload emitted when a trip is aborted before completion."""
     model_config = ConfigDict(extra="forbid")
 
+    ride_id: str = Field(..., min_length=3, max_length=64, description="Business ride identifier")
     cancelled_by: Literal["rider", "driver", "system"] = Field(...)
     cancellation_reason: str = Field(..., min_length=3, max_length=256)
-    cancellation_fee: Decimal = Field(default=Decimal("0.00"), ge=0, decimal_places=2)
+    cancellation_fee: NonNegativeMoney = Field(default=Decimal("0.00"), description="Cancellation fee in INR")
+    currency: Literal["INR"] = Field(default="INR", description="Currency code")
 
 
 PayloadUnion = Union[
@@ -108,7 +167,7 @@ PayloadUnion = Union[
     RideAcceptedPayload,
     RideStartedPayload,
     RideCompletedPayload,
-    RideCancelledPayload
+    RideCancelledPayload,
 ]
 
 
@@ -118,20 +177,33 @@ PayloadUnion = Union[
 
 class RideEvent(BaseModel):
     """
-    Standardized StreamForge Event Envelope per ADR 0001:
+    Standardized StreamForge Event Envelope per PRD v1.0 & ADR 0001:
     - event_id: distinct event message identifier
-    - ride_id: persistent business entity identifier
+    - event_type: ride lifecycle transition
+    - schema_version: required version integer (1)
     - occurred_at: business event timestamp (UTC)
     - produced_at: Kafka emission timestamp (UTC)
+    - producer: producer identifier
+    - payload: typed payload containing ride_id and transition details
     """
     model_config = ConfigDict(extra="forbid")
 
     event_id: str = Field(..., min_length=5, max_length=128, description="Unique event identifier")
-    ride_id: str = Field(..., min_length=5, max_length=128, description="Business ride identifier")
     event_type: RideEventType = Field(..., description="Lifecycle transition type")
+    schema_version: Literal[1] = Field(default=1, description="Event schema version")
     occurred_at: datetime = Field(..., description="Business timestamp in UTC")
     produced_at: datetime = Field(..., description="Producer emission timestamp in UTC")
+    producer: str = Field(..., min_length=1, max_length=128, description="Producer identifier")
     payload: PayloadUnion = Field(..., description="Typed payload matching event_type")
+
+    @field_validator("event_type", mode="before")
+    @classmethod
+    def normalize_event_type(cls, v: Any) -> Any:
+        """Accept enum, dot-notation or legacy underscore-notation."""
+        if isinstance(v, str):
+            v_norm = v.lower().replace("_", ".")
+            return v_norm
+        return v
 
     @field_validator("occurred_at", "produced_at", mode="after")
     @classmethod
@@ -166,6 +238,11 @@ class RideEvent(BaseModel):
             )
 
         return self
+
+    @property
+    def ride_id(self) -> str:
+        """Convenience accessor to business ride identifier."""
+        return self.payload.ride_id
 
     @property
     def lifecycle_rank(self) -> int:
