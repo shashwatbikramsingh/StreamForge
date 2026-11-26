@@ -45,3 +45,7 @@ ENV/
 *.egg
 .pytest_cache/
 
+# Local Scratch & Backups
+scratch/
+*.backup
+

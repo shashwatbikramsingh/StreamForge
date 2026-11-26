@@ -1,79 +1,263 @@
--- ==============================================================================
--- StreamForge — Database Initialization Schema (PostgreSQL)
--- Specification: streamforge_docs/database.md
--- ==============================================================================
+-- =============================================================================
+-- STREAMFORGE
+-- PostgreSQL Canonical Database Schema
+-- PRD v1.0 + ADR 0001 + StreamForge Event Contracts
+-- =============================================================================
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- 1. IMMUTABLE PROCESSED EVENTS
+-- =============================================================================
 
--- 1. Immutable Processed Events (Append-Only Event Store)
 CREATE TABLE IF NOT EXISTS processed_events (
+
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    event_id UUID NOT NULL UNIQUE,
-    ride_id UUID NOT NULL,
-    event_type TEXT NOT NULL CHECK (event_type IN ('RIDE_REQUESTED', 'RIDE_ACCEPTED', 'RIDE_STARTED', 'RIDE_COMPLETED', 'RIDE_CANCELLED')),
-    schema_version INTEGER NOT NULL CHECK (schema_version > 0),
+
+    event_id VARCHAR(128) NOT NULL UNIQUE
+        CHECK (char_length(event_id) BETWEEN 5 AND 128),
+
+    ride_id VARCHAR(64) NOT NULL
+        CHECK (char_length(ride_id) BETWEEN 3 AND 64),
+
+    event_type TEXT NOT NULL
+        CHECK (
+            event_type IN (
+                'ride.requested',
+                'ride.accepted',
+                'ride.started',
+                'ride.completed',
+                'ride.cancelled'
+            )
+        ),
+
+    schema_version INTEGER NOT NULL DEFAULT 1
+        CHECK (schema_version > 0),
+
     occurred_at TIMESTAMPTZ NOT NULL,
+
     produced_at TIMESTAMPTZ NOT NULL,
+
     ingested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
     producer TEXT NOT NULL,
+
     payload JSONB NOT NULL,
-    topic TEXT NOT NULL,
-    partition_id INTEGER NOT NULL CHECK (partition_id >= 0),
-    offset_value BIGINT NOT NULL CHECK (offset_value >= 0)
+
+    -- These become populated when repository source metadata
+    -- is added in the next implementation milestone.
+    source_topic TEXT,
+
+    source_partition INTEGER
+        CHECK (
+            source_partition IS NULL
+            OR source_partition >= 0
+        ),
+
+    source_offset BIGINT
+        CHECK (
+            source_offset IS NULL
+            OR source_offset >= 0
+        ),
+
+    CHECK (produced_at >= occurred_at),
+
+    CHECK (
+        (
+            source_topic IS NULL
+            AND source_partition IS NULL
+            AND source_offset IS NULL
+        )
+        OR
+        (
+            source_topic IS NOT NULL
+            AND source_partition IS NOT NULL
+            AND source_offset IS NOT NULL
+        )
+    )
 );
 
-CREATE INDEX IF NOT EXISTS idx_processed_events_ride_id ON processed_events (ride_id);
-CREATE INDEX IF NOT EXISTS idx_processed_events_occurred_at ON processed_events (occurred_at);
-CREATE INDEX IF NOT EXISTS idx_processed_events_type_time ON processed_events (event_type, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_processed_events_ride_id
+    ON processed_events (ride_id);
 
--- 2. Derived Rides Projection (Stateful Aggregation)
+CREATE INDEX IF NOT EXISTS idx_processed_events_occurred_at
+    ON processed_events (occurred_at);
+
+CREATE INDEX IF NOT EXISTS idx_processed_events_type_time
+    ON processed_events (event_type, occurred_at);
+
+
+-- 2. DERIVED RIDES PROJECTION
+-- =============================================================================
+
 CREATE TABLE IF NOT EXISTS rides (
-    ride_id UUID PRIMARY KEY,
-    rider_id TEXT NOT NULL,
-    driver_id TEXT,
-    pickup_city TEXT NOT NULL,
-    dropoff_city TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('REQUESTED', 'ACCEPTED', 'STARTED', 'COMPLETED', 'CANCELLED')),
-    status_rank SMALLINT NOT NULL CHECK (status_rank BETWEEN 1 AND 4),
-    fare_amount NUMERIC(12, 2) NOT NULL CHECK (fare_amount > 0),
-    currency CHAR(3) NOT NULL DEFAULT 'INR',
+
+    ride_id VARCHAR(64) PRIMARY KEY
+        CHECK (char_length(ride_id) BETWEEN 3 AND 64),
+
+    rider_id VARCHAR(64),
+
+    driver_id VARCHAR(64),
+
+    pickup_city TEXT,
+
+    dropoff_city TEXT,
+
+    status TEXT NOT NULL
+        CHECK (
+            status IN (
+                'ride.requested',
+                'ride.accepted',
+                'ride.started',
+                'ride.completed',
+                'ride.cancelled'
+            )
+        ),
+
+    status_rank SMALLINT NOT NULL
+        CHECK (status_rank BETWEEN 1 AND 4),
+
+    estimated_fare NUMERIC(12, 2)
+        CHECK (estimated_fare IS NULL OR estimated_fare > 0),
+
+    final_fare NUMERIC(12, 2)
+        CHECK (final_fare IS NULL OR final_fare > 0),
+
+    currency CHAR(3) NOT NULL DEFAULT 'INR'
+        CHECK (currency = 'INR'),
+
     requested_at TIMESTAMPTZ,
+
     accepted_at TIMESTAMPTZ,
+
     started_at TIMESTAMPTZ,
+
     completed_at TIMESTAMPTZ,
+
     cancelled_at TIMESTAMPTZ,
+
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CHECK (
+        (status = 'ride.requested' AND status_rank = 1)
+        OR
+        (status = 'ride.accepted' AND status_rank = 2)
+        OR
+        (status = 'ride.started' AND status_rank = 3)
+        OR
+        (status = 'ride.completed' AND status_rank = 4)
+        OR
+        (status = 'ride.cancelled' AND status_rank = 4)
+    ),
+
+    CHECK (
+        pickup_city IS NULL
+        OR dropoff_city IS NULL
+        OR pickup_city <> dropoff_city
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_rides_status
+    ON rides (status);
+
+CREATE INDEX IF NOT EXISTS idx_rides_requested_at
+    ON rides (requested_at);
+
+CREATE INDEX IF NOT EXISTS idx_rides_pickup_dropoff
+    ON rides (pickup_city, dropoff_city);
+
+
+-- 3. CANONICAL DEAD LETTER EVENTS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS dead_letter_events (
+
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
+    event_id VARCHAR(128),
+
+    ride_id VARCHAR(64)
+        CHECK (
+            ride_id IS NULL OR
+            char_length(ride_id) BETWEEN 3 AND 64
+        ),
+
+    source_topic TEXT NOT NULL
+        CHECK (length(btrim(source_topic)) > 0),
+
+    source_partition INTEGER NOT NULL
+        CHECK (source_partition >= 0),
+
+    source_offset BIGINT NOT NULL
+        CHECK (source_offset >= 0),
+
+    failure_category TEXT NOT NULL
+        CHECK (
+            failure_category IN (
+                'deserialization_error',
+                'validation_error',
+                'invalid_state_transition',
+                'transient_exhausted',
+                'processing_error'
+            )
+        ),
+
+    failure_reason TEXT NOT NULL
+        CHECK (
+            char_length(failure_reason) BETWEEN 1 AND 2000
+        ),
+
+    payload TEXT NOT NULL,
+
+    failed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    attempt_count INTEGER NOT NULL DEFAULT 1
+        CHECK (attempt_count >= 1),
+
+    -- Bound the serialized forensic envelope.
+    -- The application will separately enforce the raw message limit.
+    CHECK (octet_length(payload) <= 524288)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dlq_failed_at
+    ON dead_letter_events (failed_at);
+
+CREATE INDEX IF NOT EXISTS idx_dlq_failure_category
+    ON dead_letter_events (failure_category);
+
+CREATE INDEX IF NOT EXISTS idx_dlq_event_id
+    ON dead_letter_events (event_id);
+
+CREATE INDEX IF NOT EXISTS idx_dlq_ride_id
+    ON dead_letter_events (ride_id);
+
+CREATE INDEX IF NOT EXISTS idx_dlq_source_coordinates
+    ON dead_letter_events (
+        source_topic,
+        source_partition,
+        source_offset
+    );
+
+
+-- 4. PIPELINE COUNTERS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS pipeline_counters (
+
+    metric_key TEXT PRIMARY KEY,
+
+    metric_value BIGINT NOT NULL DEFAULT 0
+        CHECK (metric_value >= 0),
+
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_rides_status ON rides (status);
-CREATE INDEX IF NOT EXISTS idx_rides_requested_at ON rides (requested_at);
-CREATE INDEX IF NOT EXISTS idx_rides_pickup_dropoff ON rides (pickup_city, dropoff_city);
+-- Initialize canonical metrics without resetting existing values.
 
--- 3. Dead Letter Queue (Corrupted or Invalid Payload Isolation)
-CREATE TABLE IF NOT EXISTS dead_letter_queue (
-    dlq_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    raw_payload TEXT NOT NULL,
-    topic TEXT NOT NULL,
-    partition_id INTEGER NOT NULL,
-    offset_value BIGINT NOT NULL,
-    error_type TEXT NOT NULL,
-    error_message TEXT NOT NULL,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    resolved_at TIMESTAMPTZ,
-    is_resolved BOOLEAN NOT NULL DEFAULT FALSE
-);
+INSERT INTO pipeline_counters (metric_key, metric_value)
+VALUES
+    ('duplicates_ignored', 0),
+    ('transient_retries', 0)
+ON CONFLICT (metric_key) DO NOTHING;
 
-CREATE INDEX IF NOT EXISTS idx_dlq_received_at ON dead_letter_queue (received_at);
-CREATE INDEX IF NOT EXISTS idx_dlq_resolved ON dead_letter_queue (is_resolved);
 
--- Seed Initial Demo Metrics Snapshot
-INSERT INTO rides (
-    ride_id, rider_id, driver_id, pickup_city, dropoff_city, 
-    status, status_rank, fare_amount, currency, requested_at, accepted_at, started_at, completed_at, updated_at
-) VALUES 
-('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'rider_4921', 'driver_8812', 'Koramangala', 'Indiranagar', 'COMPLETED', 4, 345.50, 'INR', NOW() - INTERVAL '15 minutes', NOW() - INTERVAL '13 minutes', NOW() - INTERVAL '10 minutes', NOW() - INTERVAL '2 minutes', NOW()),
-('b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22', 'rider_1048', 'driver_3421', 'HSR Layout', 'Whitefield', 'COMPLETED', 4, 520.00, 'INR', NOW() - INTERVAL '25 minutes', NOW() - INTERVAL '22 minutes', NOW() - INTERVAL '18 minutes', NOW() - INTERVAL '5 minutes', NOW()),
-('c2eebc99-9c0b-4ef8-bb6d-6bb9bd380a33', 'rider_9082', 'driver_1994', 'Bellandur', 'Electronic City', 'STARTED', 3, 410.00, 'INR', NOW() - INTERVAL '8 minutes', NOW() - INTERVAL '6 minutes', NOW() - INTERVAL '3 minutes', NULL, NOW()),
-('d3eebc99-9c0b-4ef8-bb6d-6bb9bd380a44', 'rider_3345', NULL, 'MG Road', 'Marathahalli', 'CANCELLED', 1, 280.00, 'INR', NOW() - INTERVAL '30 minutes', NULL, NULL, NULL, NOW())
-ON CONFLICT (ride_id) DO NOTHING;
-
+-- =============================================================================
+-- END OF STREAMFORGE DATABASE SCHEMA
+-- =============================================================================

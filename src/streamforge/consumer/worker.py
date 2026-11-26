@@ -12,10 +12,10 @@ Core invariants:
    partition head-of-line blocking while maintaining complete audit trails.
 """
 
-import json
 import logging
 from typing import Optional, Dict, Any, List
 from streamforge.config.settings import Settings, get_settings
+from streamforge.events.deserializer import deserialize_kafka_value
 from streamforge.processor.engine import StreamProcessor, ProcessResult
 
 logger = logging.getLogger(__name__)
@@ -82,35 +82,70 @@ class StreamConsumerWorker:
         self.processor = processor
         self.settings = settings or get_settings()
         self.topic = topic or self.settings.kafka_topic_rides
-        self.dry_run = dry_run or not CONFLUENT_KAFKA_AVAILABLE
+        self.dry_run = dry_run
         self.is_running = False
-
         self.messages_processed = 0
         self.messages_committed = 0
-        self.committed_offsets: Dict[str, int] = {}  # key: f"{topic}:{partition}" -> offset
 
+        self.committed_offsets: Dict[str, int] = {}  # key: f"{topic}:{partition}" -> offset
         self._in_memory_queue: List[MockMessage] = []
         self._consumer = None
 
-        if not self.dry_run:
+        # Prevent processing later offsets after an uncommitted failure.
+        self._halted = False
+        self._halt_reason: Optional[str] = None
+
+        # Explicit dry-run mode is permitted for tests and offline development.
+        if self.dry_run:
+            logger.info("StreamConsumerWorker initialized in explicit dry-run mode.")
+        else:
+            # Never silently convert a production consumer into dry-run mode.
+            if not CONFLUENT_KAFKA_AVAILABLE:
+                raise RuntimeError(
+                    "confluent-kafka is not installed. "
+                    "Install the dependency or explicitly enable dry_run=True."
+                )
+
+            if self.settings.kafka_enable_auto_commit is not False:
+                raise ValueError(
+                    "Automatic Kafka offset commits must remain disabled."
+                )
+
+            # These settings protect our at-least-once delivery guarantee.
+            protected_config = {
+                "enable.auto.commit": False,
+                "enable.auto.offset.store": False,
+            }
+
+            overrides = consumer_config or {}
+
+            # Reject attempts to weaken our delivery guarantees.
+            for key, required_value in protected_config.items():
+                if key in overrides and overrides[key] is not required_value:
+                    raise ValueError(
+                        f"Unsafe consumer configuration override: '{key}' must be {required_value}, "
+                        f"got {overrides[key]}."
+                    )
+
             base_config = {
                 "bootstrap.servers": self.settings.kafka_bootstrap_servers,
                 "group.id": self.settings.kafka_consumer_group,
                 "auto.offset.reset": "earliest",
-                "enable.auto.commit": False,  # CRITICAL: Manual commit only after DB durability
+                "enable.auto.commit": False,
+                "enable.auto.offset.store": False,
             }
             if consumer_config:
                 base_config.update(consumer_config)
+            base_config.update(protected_config)
+            self.consumer_config = base_config
 
             try:
                 self._consumer = confluent_kafka.Consumer(base_config)
                 self._consumer.subscribe([self.topic])
                 self.is_running = True
             except Exception as e:
-                logger.warning(
-                    "Failed to initialize confluent_kafka.Consumer (%s). Falling back to dry-run.", e
-                )
-                self.dry_run = True
+                logger.error("Failed to initialize confluent_kafka.Consumer: %s", e)
+                raise RuntimeError(f"Failed to initialize Kafka consumer: {e}") from e
 
     def inject_mock_message(
         self,
@@ -132,39 +167,59 @@ class StreamConsumerWorker:
         )
         self._in_memory_queue.append(msg)
 
-    def poll_and_process(self, timeout_seconds: float = 1.0) -> Optional[ProcessResult]:
+    def poll_and_process(
+        self,
+        timeout_seconds: float = 1.0,
+    ) -> Optional[ProcessResult]:
         """
-        Poll a message from Kafka, process it via the StreamProcessor, and commit offset on success.
+        Poll one Kafka message, validate its JSON representation,
+        hand it to the processor, and commit only after durable processing.
 
-        Commit Rule (ADR 0001 Decision 3 & RULES.md):
-        - If database commit succeeded (accepted, duplicate, or quarantined in DLQ): commit offset.
-        - If unhandled failure or database crash occurs: DO NOT COMMIT offset.
+        A processing or commit failure halts this worker so that a later
+        message cannot cause the failed message's offset to be skipped.
         """
-        msg = None
+        if self._halted:
+            raise RuntimeError(
+                "Consumer worker is halted after an uncommitted failure. "
+                "Close and recreate the worker to resume from Kafka's "
+                "last committed offset. "
+                f"Reason: {self._halt_reason}"
+            )
+
+        if timeout_seconds < 0:
+            raise ValueError("timeout_seconds must be non-negative.")
+
+        # STEP 1: Retrieve one message.
         if self.dry_run:
-            if self._in_memory_queue:
-                msg = self._in_memory_queue.pop(0)
-            else:
+            if not self._in_memory_queue:
                 return None
+            msg = self._in_memory_queue.pop(0)
         else:
-            if not self._consumer:
-                return None
+            if self._consumer is None:
+                raise RuntimeError(
+                    "Kafka consumer is not initialized."
+                )
             try:
                 msg = self._consumer.poll(timeout=timeout_seconds)
             except Exception as e:
                 logger.error("Error while polling Kafka: %s", e)
-                return None
+                raise
 
         if msg is None:
             return None
 
         # Check for Kafka-level delivery errors
         if msg.error() is not None:
-            if (
-                CONFLUENT_KAFKA_AVAILABLE
-                and hasattr(confluent_kafka, "KafkaError")
-                and msg.error().code() == confluent_kafka.KafkaError._PARTITION_EOF
-            ):
+            err = msg.error()
+            is_eof = False
+            if hasattr(err, "code") and callable(err.code):
+                eof_code = getattr(confluent_kafka.KafkaError, "_PARTITION_EOF", -191) if (CONFLUENT_KAFKA_AVAILABLE and hasattr(confluent_kafka, "KafkaError")) else -191
+                if err.code() == eof_code:
+                    is_eof = True
+            elif getattr(err, "is_eof", False):
+                is_eof = True
+
+            if is_eof:
                 logger.debug(
                     "Reached end of partition: %s [%s] @ offset %s",
                     msg.topic(),
@@ -172,49 +227,119 @@ class StreamConsumerWorker:
                     msg.offset(),
                 )
                 return None
-            logger.error("Consumer received error from Kafka broker: %s", msg.error())
-            return None
 
-        # Parse message value as JSON (or encapsulate malformed bytes)
-        raw_val = msg.value()
+            # Surface other Kafka message errors instead of silently swallowing
+            logger.error("Consumer received error from Kafka broker: %s", err)
+            raise RuntimeError(f"Kafka message error: {err}")
+
+        # STEP 1: Deserialize the Kafka message.
         try:
-            raw_payload = json.loads(raw_val.decode("utf-8"))
-        except Exception:
-            raw_payload = {"raw_content": raw_val.decode("utf-8", errors="replace")}
-
-        # Step 2: Hand off to StreamProcessor
-        # If the repository encounters an unhandled exception here, it bubbles up
-        # and offset commitment will NOT occur.
-        result = self.processor.process_raw_message(
-            raw_payload=raw_payload,
-            source_partition=msg.partition(),
-            source_offset=msg.offset(),
-        )
-        self.messages_processed += 1
-
-        # Step 3: Manual Offset Commit
-        # Both successful processing, duplicate replay, and DLQ quarantine are durable in DB.
-        self._commit_offset(msg)
-        return result
+            deserialization_result = deserialize_kafka_value(
+                msg.value()
+            )
+            # STEP 2: Route according to deserialization outcome.
+            if deserialization_result.succeeded:
+                if deserialization_result.payload is None:
+                    raise RuntimeError(
+                        "Deserializer succeeded without producing a JSON object."
+                    )
+                # Valid JSON object: perform semantic schema validation.
+                result = self.processor.process_raw_message(
+                    raw_message=deserialization_result.payload,
+                    source_partition=msg.partition(),
+                    source_offset=msg.offset(),
+                    source_topic=msg.topic(),
+                )
+            else:
+                # Invalid transport representation: write directly to DLQ.
+                result = self.processor.process_deserialization_failure(
+                    result=deserialization_result,
+                    source_topic=msg.topic(),
+                    source_partition=msg.partition(),
+                    source_offset=msg.offset(),
+                )
+            # STEP 3: Processing or quarantine completed successfully.
+            self.messages_processed += 1
+            # STEP 4: Commit only after repository operation succeeds.
+            self._commit_offset(msg)
+            return result
+        except Exception as e:
+            self._halted = True
+            self._halt_reason = (
+                f"Processing/commit failure at {msg.topic()} [{msg.partition()}] "
+                f"offset {msg.offset()}: {e}"
+            )
+            logger.error(
+                "Halting consumer worker due to unhandled processing/storage failure: %s",
+                self._halt_reason,
+                exc_info=True,
+            )
+            raise
 
     def _commit_offset(self, msg: Any):
-        """Commit the Kafka offset manually after verifying database durability."""
-        topic_partition_key = f"{msg.topic()}:{msg.partition()}"
-        self.committed_offsets[topic_partition_key] = msg.offset() + 1
-        self.messages_committed += 1
+        """
+        Commit a Kafka offset only after downstream processing is durable.
 
-        if not self.dry_run and self._consumer:
-            try:
-                self._consumer.commit(message=msg, asynchronous=False)
-                logger.debug(
-                    "Committed offset %s for topic %s [%s]",
-                    msg.offset(),
-                    msg.topic(),
-                    msg.partition(),
+        Live mode:
+            Wait for broker confirmation before updating metrics.
+
+        Dry-run mode:
+            Record a simulated commit in local memory.
+        """
+        topic = msg.topic()
+        partition = msg.partition()
+        offset = msg.offset()
+
+        topic_partition_key = f"{topic}:{partition}"
+
+        # Explicit simulation mode.
+        if self.dry_run:
+            self.committed_offsets[topic_partition_key] = offset + 1
+            self.messages_committed += 1
+
+            logger.debug(
+                "[Dry-run] Simulated offset commit: %s [%s] -> %s",
+                topic,
+                partition,
+                offset + 1,
+            )
+            return
+
+        if self._consumer is None:
+            raise RuntimeError(
+                "Cannot commit Kafka offset: consumer is not initialized."
+            )
+
+        try:
+            partitions = self._consumer.commit(
+                message=msg,
+                asynchronous=False,
+            )
+            if not partitions:
+                raise RuntimeError(
+                    "Kafka returned no offset commit confirmation."
                 )
-            except Exception as e:
-                logger.error("Failed to commit offset to Kafka broker: %s", e)
-                raise
+
+            for tp in partitions:
+                err = getattr(tp, "error", None)
+                if err is not None:
+                    err_val = err() if callable(err) else err
+                    if err_val:
+                        raise RuntimeError(
+                            f"Broker returned partition error during offset commit: {err_val}"
+                        )
+
+            self.committed_offsets[topic_partition_key] = offset + 1
+            self.messages_committed += 1
+            logger.debug(
+                "Committed offset %s for topic %s [%s]",
+                offset + 1,
+                topic,
+                partition,
+            )
+        except Exception as e:
+            logger.error("Failed to commit offset to Kafka broker: %s", e)
+            raise
 
     def close(self):
         """Close the Kafka consumer cleanly."""

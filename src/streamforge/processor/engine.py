@@ -17,6 +17,7 @@ from typing import Dict, Any, Optional, Literal
 from pydantic import ValidationError
 
 from streamforge.events.schemas import RideEvent
+from streamforge.events.deserializer import DeserializationResult
 from streamforge.storage.repository import EventRepository
 
 logger = logging.getLogger(__name__)
@@ -42,28 +43,115 @@ class StreamProcessor:
     def __init__(self, repository: EventRepository):
         self.repository = repository
 
-    def process_raw_message(
+    def process_deserialization_failure(
         self,
-        raw_payload: Dict[str, Any],
-        source_partition: int = 0,
-        source_offset: int = 0,
+        result: DeserializationResult,
+        source_topic: str,
+        source_partition: int,
+        source_offset: int,
     ) -> ProcessResult:
         """
-        Process a single raw message received from Kafka.
-        Guarantees that unparseable or conflicted messages are quarantined in DLQ.
+        Persist an event that failed transport-level deserialization.
+        The raw Kafka message is preserved in the DLQ.
+        Database exceptions intentionally propagate to the consumer.
         """
+        # Only failed deserialization results belong in this method.
+        if result.succeeded or result.error_reason is None:
+            raise ValueError(
+                "process_deserialization_failure() requires "
+                "a failed DeserializationResult."
+            )
+
+        if not result.raw_record:
+            raise ValueError(
+                "Deserialization failure must contain raw record evidence."
+            )
+
+        error_reason = result.error_reason
+
+        # No event or ride identity can be trusted when decoding failed.
+        # UNKNOWN_EVENT_ID is only a presentation sentinel in ProcessResult.
+        # PostgreSQL receives event_id=None.
+        dlq_id = self.repository.insert_dead_letter(
+            event_id=None,
+            ride_id=None,
+            raw_payload=result.raw_record,
+            error_reason=error_reason,
+            source_partition=source_partition,
+            source_offset=source_offset,
+            source_topic=source_topic,
+            failure_category="deserialization_error",
+        )
+
+        return ProcessResult(
+            status="quarantined",
+            event_id="UNKNOWN_EVENT_ID",
+            ride_id=None,
+            latency_ms=0.0,
+            error_reason=error_reason,
+            dlq_id=dlq_id,
+        )
+
+    def process_raw_message(
+        self,
+        raw_message: Optional[Dict[str, Any]] = None,
+        source_partition: int = 0,
+        source_offset: int = 0,
+        source_topic: str = "streamforge.rides.v1",
+        raw_payload: Optional[Dict[str, Any]] = None,
+    ) -> ProcessResult:
+        """
+        Validate and process a decoded StreamForge ride event.
+        Validation failures are durably quarantined.
+        Infrastructure failures propagate to the consumer.
+        """
+        payload = raw_message if raw_message is not None else raw_payload
+        if not isinstance(payload, dict):
+            raise TypeError("raw_message must be a dictionary.")
+        raw_payload = payload
+
         ingested_at = datetime.now(timezone.utc)
-        event_id = str(raw_payload.get("event_id", "UNKNOWN_EVENT_ID"))
-        ride_id = str(raw_payload.get("ride_id", "UNKNOWN_RIDE_ID"))
+
+        # Extract identifiers only when they are safe to use.
+        raw_event_id = raw_payload.get("event_id")
+        event_id = (
+            raw_event_id.strip()
+            if isinstance(raw_event_id, str) and raw_event_id.strip()
+            else None
+        )
+
+        raw_payload_data = raw_payload.get("payload")
+        raw_ride_id = (
+            raw_payload_data.get("ride_id")
+            if isinstance(raw_payload_data, dict)
+            else raw_payload.get("ride_id")
+        )
+        ride_id = (
+            raw_ride_id.strip()
+            if isinstance(raw_ride_id, str) and raw_ride_id.strip()
+            else None
+        )
 
         # Step 1: Validate payload against Pydantic schema
         try:
             event = RideEvent.model_validate(raw_payload)
             event_id = event.event_id
             ride_id = event.ride_id
-        except (ValidationError, Exception) as e:
-            error_reason = f"SchemaValidationError: {e}"
-            logger.warning("Event %s failed schema validation: %s", event_id, error_reason)
+        except ValidationError as e:
+            issues = e.errors(
+                include_input=False,
+                include_context=False,
+                include_url=False,
+            )
+            safe_issues = [
+                f"{'.'.join(str(part) for part in issue.get('loc', ())) or '<root>'}:"
+                f"{issue.get('type', 'validation_error')}"
+                for issue in issues[:20]
+            ]
+            error_reason = (
+                "SchemaValidationError: " + "; ".join(safe_issues)
+            )[:2000]
+            logger.warning("Event %s failed schema validation: %s", event_id or "UNKNOWN", error_reason)
             dlq_id = self.repository.insert_dead_letter(
                 event_id=event_id,
                 ride_id=ride_id,
@@ -71,10 +159,12 @@ class StreamProcessor:
                 error_reason=error_reason,
                 source_partition=source_partition,
                 source_offset=source_offset,
+                source_topic=source_topic,
+                failure_category="validation_error",
             )
             return ProcessResult(
                 status="quarantined",
-                event_id=event_id,
+                event_id=event_id or "UNKNOWN_EVENT_ID",
                 ride_id=ride_id,
                 latency_ms=0.0,
                 error_reason=error_reason,
@@ -84,22 +174,28 @@ class StreamProcessor:
         # Calculate pipeline ingestion latency: ingested_at - produced_at
         latency_ms = max(0.0, (ingested_at - event.produced_at).total_seconds() * 1000.0)
 
-        # Step 2: Idempotent insertion into processed_events
-        is_new = self.repository.insert_processed_event(event, ingested_at=ingested_at)
-        if not is_new:
-            # Duplicate event replay: already durable, no aggregate effect
+        # Step 2: Atomic event persistence + ride projection.
+        persistence = self.repository.persist_event_and_projection(
+            event=event,
+            ingested_at=ingested_at,
+            source_topic=source_topic,
+            source_partition=source_partition,
+            source_offset=source_offset,
+        )
+        if persistence.status == "duplicate":
             return ProcessResult(
                 status="duplicate",
                 event_id=event.event_id,
                 ride_id=event.ride_id,
                 latency_ms=latency_ms,
             )
-
-        # Step 3: Monotonic projection update into rides
-        ok, conflict_reason = self.repository.upsert_ride_projection(event)
-        if not ok:
-            # Conflicting terminal transition per ADR 0001 (Decision 5): quarantine in DLQ
-            error_reason = f"invalid_state_transition: {conflict_reason}"
+        if persistence.status == "conflict":
+            error_reason = (
+                "invalid_state_transition: "
+                f"{persistence.conflict_reason or 'Unspecified projection conflict'}"
+            )
+            # This happens after atomic persistence has returned.
+            # PostgreSQL's failed transaction will already have rolled back.
             dlq_id = self.repository.insert_dead_letter(
                 event_id=event.event_id,
                 ride_id=event.ride_id,
@@ -107,6 +203,8 @@ class StreamProcessor:
                 error_reason=error_reason,
                 source_partition=source_partition,
                 source_offset=source_offset,
+                source_topic=source_topic,
+                failure_category="invalid_state_transition",
             )
             return ProcessResult(
                 status="quarantined",
