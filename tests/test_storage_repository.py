@@ -26,15 +26,16 @@ def test_idempotent_event_insertion():
     now = datetime.now(timezone.utc)
     event = RideEvent(
         event_id="EVT-IDEM-001",
-        ride_id="RIDE-IDEM-001",
         event_type=RideEventType.REQUESTED,
         occurred_at=now,
         produced_at=now,
+        producer="streamforge-test",
         payload=RideRequestedPayload(
+            ride_id="RIDE-IDEM-001",
             rider_id="usr_110",
-            pickup_zone=BengaluruZone.KORAMANGALA,
-            dropoff_zone=BengaluruZone.INDIRANAGAR,
-            estimated_fare=Decimal("190.00"),
+            pickup_city=BengaluruZone.KORAMANGALA,
+            dropoff_city=BengaluruZone.INDIRANAGAR,
+            fare_amount=Decimal("190.00"),
         ),
     )
 
@@ -56,39 +57,44 @@ def test_monotonic_projection_and_coalesce_backfill():
     # 1. Event 3: STARTED arrives first (due to network reordering)
     evt_started = RideEvent(
         event_id="EVT-003",
-        ride_id=ride_id,
         event_type=RideEventType.STARTED,
         occurred_at=now + timedelta(minutes=5),
         produced_at=now + timedelta(minutes=5),
-        payload=RideStartedPayload(driver_id="drv_9921", start_odometer_km=Decimal("15000.00")),
+        producer="streamforge-test",
+        payload=RideStartedPayload(
+            ride_id=ride_id,
+            driver_id="drv_9921",
+            start_odometer_km=Decimal("15000.00"),
+        ),
     )
     ok, err = repo.upsert_ride_projection(evt_started)
     assert ok is True
     assert err is None
-    assert repo.get_ride(ride_id)["status"] == "ride_started"
+    assert repo.get_ride(ride_id)["status"] == "ride.started"
     assert repo.get_ride(ride_id)["current_rank"] == 3
 
     # 2. Delayed Event 1: REQUESTED arrives late
     evt_requested = RideEvent(
         event_id="EVT-001",
-        ride_id=ride_id,
         event_type=RideEventType.REQUESTED,
         occurred_at=now,
         produced_at=now,
+        producer="streamforge-test",
         payload=RideRequestedPayload(
+            ride_id=ride_id,
             rider_id="usr_999",
-            pickup_zone=BengaluruZone.WHITEFIELD,
-            dropoff_zone=BengaluruZone.MG_ROAD,
-            estimated_fare=Decimal("350.00"),
+            pickup_city=BengaluruZone.WHITEFIELD,
+            dropoff_city=BengaluruZone.MG_ROAD,
+            fare_amount=Decimal("350.00"),
         ),
     )
     ok, err = repo.upsert_ride_projection(evt_requested)
     assert ok is True
     assert err is None
 
-    # Status must NOT have regressed to ride_requested!
+    # Status must NOT have regressed to ride.requested!
     ride = repo.get_ride(ride_id)
-    assert ride["status"] == "ride_started"
+    assert ride["status"] == "ride.started"
     assert ride["current_rank"] == 3
     # Metadata backfilled via COALESCE
     assert ride["rider_id"] == "usr_999"
@@ -105,13 +111,14 @@ def test_terminal_conflict_rejected():
     # Complete the ride (rank 4)
     evt_completed = RideEvent(
         event_id="EVT-COMP-01",
-        ride_id=ride_id,
         event_type=RideEventType.COMPLETED,
         occurred_at=now + timedelta(minutes=20),
         produced_at=now + timedelta(minutes=20),
+        producer="streamforge-test",
         payload=RideCompletedPayload(
+            ride_id=ride_id,
             driver_id="drv_123",
-            final_fare=Decimal("280.00"),
+            fare_amount=Decimal("280.00"),
             distance_km=Decimal("8.50"),
             duration_seconds=950,
         ),
@@ -122,11 +129,15 @@ def test_terminal_conflict_rejected():
     # Incoming CANCELLED event for the same ride
     evt_cancelled = RideEvent(
         event_id="EVT-CANC-01",
-        ride_id=ride_id,
         event_type=RideEventType.CANCELLED,
         occurred_at=now + timedelta(minutes=21),
         produced_at=now + timedelta(minutes=21),
-        payload=RideCancelledPayload(cancelled_by="rider", cancellation_reason="Changed mind"),
+        producer="streamforge-test",
+        payload=RideCancelledPayload(
+            ride_id=ride_id,
+            cancelled_by="rider",
+            cancellation_reason="Changed mind",
+        ),
     )
     ok, err = repo.upsert_ride_projection(evt_cancelled)
     assert ok is False

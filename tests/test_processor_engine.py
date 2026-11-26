@@ -27,16 +27,17 @@ def test_process_valid_event():
 
     raw_event = {
         "event_id": "EVT-PROC-01",
-        "ride_id": "RIDE-PROC-01",
-        "event_type": "ride_requested",
+        "event_type": "ride.requested",
+        "schema_version": 1,
         "occurred_at": now.isoformat(),
         "produced_at": (now + timedelta(milliseconds=45)).isoformat(),
+        "producer": "streamforge-test",
         "payload": {
+            "ride_id": "RIDE-PROC-01",
             "rider_id": "usr_9921",
-            "pickup_zone": "Koramangala",
-            "dropoff_zone": "Indiranagar",
-            "estimated_fare": "210.00",
-            "surge_multiplier": "1.00",
+            "pickup_city": "Koramangala",
+            "dropoff_city": "Indiranagar",
+            "fare_amount": "210.00",
         },
     }
 
@@ -45,7 +46,7 @@ def test_process_valid_event():
     assert result.event_id == "EVT-PROC-01"
     assert result.ride_id == "RIDE-PROC-01"
     assert result.latency_ms >= 0.0
-    assert repo.get_ride("RIDE-PROC-01")["status"] == "ride_requested"
+    assert repo.get_ride("RIDE-PROC-01")["status"] == "ride.requested"
 
 
 def test_process_duplicate_event():
@@ -56,16 +57,17 @@ def test_process_duplicate_event():
 
     raw_event = {
         "event_id": "EVT-DUP-01",
-        "ride_id": "RIDE-DUP-01",
-        "event_type": "ride_requested",
+        "event_type": "ride.requested",
+        "schema_version": 1,
         "occurred_at": now.isoformat(),
         "produced_at": now.isoformat(),
+        "producer": "streamforge-test",
         "payload": {
+            "ride_id": "RIDE-DUP-01",
             "rider_id": "usr_9921",
-            "pickup_zone": "Whitefield",
-            "dropoff_zone": "Electronic City",
-            "estimated_fare": "450.00",
-            "surge_multiplier": "1.00",
+            "pickup_city": "Whitefield",
+            "dropoff_city": "Electronic City",
+            "fare_amount": "450.00",
         },
     }
 
@@ -106,13 +108,15 @@ def test_process_terminal_conflict_quarantine():
     # 1. Complete ride
     comp_event = {
         "event_id": "EVT-C-01",
-        "ride_id": ride_id,
-        "event_type": "ride_completed",
+        "event_type": "ride.completed",
+        "schema_version": 1,
         "occurred_at": now.isoformat(),
         "produced_at": now.isoformat(),
+        "producer": "streamforge-test",
         "payload": {
+            "ride_id": ride_id,
             "driver_id": "drv_11",
-            "final_fare": "300.00",
+            "fare_amount": "300.00",
             "distance_km": "9.50",
             "duration_seconds": 1200,
         },
@@ -123,11 +127,13 @@ def test_process_terminal_conflict_quarantine():
     # 2. Incoming CANCELLED for completed ride
     canc_event = {
         "event_id": "EVT-CANC-99",
-        "ride_id": ride_id,
-        "event_type": "ride_cancelled",
+        "event_type": "ride.cancelled",
+        "schema_version": 1,
         "occurred_at": (now + timedelta(seconds=10)).isoformat(),
         "produced_at": (now + timedelta(seconds=10)).isoformat(),
+        "producer": "streamforge-test",
         "payload": {
+            "ride_id": ride_id,
             "cancelled_by": "rider",
             "cancellation_reason": "Late request",
             "cancellation_fee": "0.00",

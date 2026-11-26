@@ -56,7 +56,7 @@ def test_consumer_successful_processing_and_offset_commit(worker, repo):
     # Verify repository has projected ride
     ride = repo.get_ride("ride-101")
     assert ride is not None
-    assert ride["status"] == "ride_requested"
+    assert ride["status"] == "ride.requested"
     assert ride["estimated_fare"] > 0
 
 
@@ -119,17 +119,18 @@ def test_consumer_terminal_conflict_quarantined_and_committed(worker, repo):
         )
         worker.poll_and_process()
 
-    assert repo.get_ride("ride-103")["status"] == "ride_completed"
+    assert repo.get_ride("ride-103")["status"] == "ride.completed"
 
     # Now inject conflicting CANCELLED event
     now = datetime.now(timezone.utc)
     cancel_evt = RideEvent(
         event_id="EVT-CANCEL-CONFLICT-01",
-        ride_id="ride-103",
         event_type=RideEventType.CANCELLED,
         occurred_at=now,
         produced_at=now,
+        producer="streamforge-test",
         payload=RideCancelledPayload(
+            ride_id="ride-103",
             cancelled_by="rider",
             cancellation_reason="changed mind after arrival",
             cancellation_fee=Decimal("0.00"),
