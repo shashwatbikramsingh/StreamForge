@@ -15,10 +15,15 @@ Core invariants:
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from streamforge.config.settings import Settings, get_settings
 from streamforge.events.deserializer import deserialize_kafka_value
-from streamforge.processor.engine import StreamProcessor, ProcessResult
+from streamforge.processor.engine import (
+    StreamProcessor,
+    ProcessResult,
+    RawMessageItem,
+    BatchProcessResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +315,189 @@ class StreamConsumerWorker:
             )
             raise
 
+    def poll_and_process_batch(
+        self,
+        max_batch_size: int = 50,
+        timeout_seconds: float = 0.1,
+        *,
+        batch_size: Optional[int] = None,
+        batch_timeout_ms: Optional[float] = None,
+    ) -> Optional[BatchProcessResult]:
+        """
+        Poll Kafka messages up to max_batch_size (or until timeout_seconds elapses),
+        convert records into RawMessageItem objects, pass the batch to
+        StreamProcessor.process_batch(), and commit per-partition highest contiguous
+        delivered offsets only after durable persistence and DLQ handling.
+
+        A processing or commit failure halts this worker so that subsequent messages
+        cannot advance offsets past unhandled records, preserving at-least-once delivery.
+        """
+        if self._halted:
+            raise RuntimeError(
+                "Consumer worker is halted after an uncommitted failure. "
+                "Close and recreate the worker to resume from Kafka's "
+                "last committed offset. "
+                f"Reason: {self._halt_reason}"
+            )
+
+        if batch_size is not None:
+            max_batch_size = batch_size
+        if batch_timeout_ms is not None:
+            timeout_seconds = batch_timeout_ms / 1000.0
+
+        if max_batch_size <= 0:
+            raise ValueError("max_batch_size must be positive.")
+        if timeout_seconds < 0:
+            raise ValueError("timeout_seconds must be non-negative.")
+
+        t_iter_start = time.perf_counter()
+
+        # STEP 1: Retrieve batch of messages
+        t_poll_start = time.perf_counter()
+        raw_msgs = []
+        if self.dry_run:
+            count = min(max_batch_size, len(self._in_memory_queue))
+            for _ in range(count):
+                raw_msgs.append(self._in_memory_queue.pop(0))
+        else:
+            if self._consumer is None:
+                raise RuntimeError("Kafka consumer is not initialized.")
+            try:
+                # Use native consume() to retrieve up to max_batch_size messages
+                raw_msgs = self._consumer.consume(
+                    num_messages=max_batch_size,
+                    timeout=timeout_seconds,
+                )
+            except Exception as e:
+                logger.error("Error while polling Kafka in batch: %s", e)
+                raise
+
+        t_poll_end = time.perf_counter()
+        poll_ms = max(0.0, (t_poll_end - t_poll_start) * 1000.0)
+
+        if not raw_msgs:
+            return None
+
+        # Filter and validate polled messages
+        valid_msgs = []
+        for msg in raw_msgs:
+            if msg.error() is not None:
+                err = msg.error()
+                is_eof = False
+                if hasattr(err, "code") and callable(err.code):
+                    eof_code = getattr(confluent_kafka.KafkaError, "_PARTITION_EOF", -191) if (CONFLUENT_KAFKA_AVAILABLE and hasattr(confluent_kafka, "KafkaError")) else -191
+                    if err.code() == eof_code:
+                        is_eof = True
+                elif getattr(err, "is_eof", False):
+                    is_eof = True
+
+                if is_eof:
+                    logger.debug(
+                        "Reached end of partition: %s [%s] @ offset %s",
+                        msg.topic(),
+                        msg.partition(),
+                        msg.offset(),
+                    )
+                    continue
+
+                logger.error("Consumer received error from Kafka broker in batch: %s", err)
+                raise RuntimeError(f"Kafka message error: {err}")
+
+            valid_msgs.append(msg)
+
+        if not valid_msgs:
+            return None
+
+        # STEP 2: Convert Kafka messages into RawMessageItem objects
+        raw_items: List[RawMessageItem] = []
+        for msg in valid_msgs:
+            try:
+                deserialization_result = deserialize_kafka_value(msg.value())
+                if deserialization_result.succeeded:
+                    raw_items.append(
+                        RawMessageItem(
+                            raw_payload=deserialization_result.payload,
+                            source_partition=msg.partition(),
+                            source_offset=msg.offset(),
+                            source_topic=msg.topic(),
+                        )
+                    )
+                else:
+                    raw_items.append(
+                        RawMessageItem(
+                            deserialization_result=deserialization_result,
+                            source_partition=msg.partition(),
+                            source_offset=msg.offset(),
+                            source_topic=msg.topic(),
+                        )
+                    )
+            except Exception as e:
+                self._halted = True
+                self._halt_reason = (
+                    f"Fatal deserializer failure at {msg.topic()} [{msg.partition()}] offset {msg.offset()}: {e}"
+                )
+                logger.error(self._halt_reason, exc_info=True)
+                raise
+
+        # STEP 3: Pass batch to StreamProcessor
+        try:
+            batch_result = self.processor.process_batch(raw_items)
+        except Exception as e:
+            self._halted = True
+            first_msg = valid_msgs[0]
+            last_msg = valid_msgs[-1]
+            self._halt_reason = (
+                f"Batch processing/storage failure for {len(valid_msgs)} messages "
+                f"(first: {first_msg.topic()} [{first_msg.partition()}] offset {first_msg.offset()}, "
+                f"last: {last_msg.topic()} [{last_msg.partition()}] offset {last_msg.offset()}): {e}"
+            )
+            logger.error(
+                "Halting consumer worker due to unhandled batch processing/storage failure: %s",
+                self._halt_reason,
+                exc_info=True,
+            )
+            raise
+
+        self.messages_processed += len(valid_msgs)
+
+        # STEP 4: Calculate highest delivered contiguous offsets per partition
+        target_offsets: Dict[Tuple[str, int], int] = {}
+        for msg in valid_msgs:
+            key = (msg.topic(), msg.partition())
+            next_off = msg.offset() + 1
+            if key not in target_offsets or next_off > target_offsets[key]:
+                target_offsets[key] = next_off
+
+        # STEP 5: Commit offsets only after durable persistence
+        t_commit_start = time.perf_counter()
+        try:
+            self._commit_batch_offsets(target_offsets, message_count=len(valid_msgs))
+        except Exception as e:
+            self._halted = True
+            self._halt_reason = f"Batch offset commit failure for partitions {list(target_offsets.keys())}: {e}"
+            logger.error(
+                "Halting consumer worker due to offset commit failure: %s",
+                self._halt_reason,
+                exc_info=True,
+            )
+            raise
+        t_commit_end = time.perf_counter()
+        commit_ms = max(0.0, (t_commit_end - t_commit_start) * 1000.0)
+
+        val_ms = getattr(self.processor, "last_validation_ms", 0.0)
+        db_ms = getattr(self.processor, "last_db_persist_ms", 0.0)
+        total_proc_ms = max(0.0, (time.perf_counter() - t_iter_start) * 1000.0)
+
+        self.last_stage_timing = StageTiming(
+            poll_ms=round(poll_ms, 3),
+            validation_ms=round(val_ms, 3),
+            db_persist_ms=round(db_ms, 3),
+            offset_commit_ms=round(commit_ms, 3),
+            total_processing_ms=round(total_proc_ms, 3),
+        )
+
+        return batch_result
+
     def _commit_offset(self, msg: Any):
         """
         Commit a Kafka offset only after downstream processing is durable.
@@ -373,6 +561,63 @@ class StreamConsumerWorker:
             )
         except Exception as e:
             logger.error("Failed to commit offset to Kafka broker: %s", e)
+            raise
+
+    def _commit_batch_offsets(
+        self,
+        target_offsets: Dict[Tuple[str, int], int],
+        message_count: int,
+    ):
+        """
+        Commit highest contiguous delivered offsets per partition for a batch.
+
+        target_offsets: Dict of (topic, partition) -> next_offset (last_offset + 1)
+        """
+        if self.dry_run:
+            for (topic, partition), next_offset in target_offsets.items():
+                self.committed_offsets[f"{topic}:{partition}"] = next_offset
+            self.messages_committed += message_count
+            logger.debug(
+                "[Dry-run] Simulated batch offset commit for %d partitions: %s",
+                len(target_offsets),
+                target_offsets,
+            )
+            return
+
+        if self._consumer is None:
+            raise RuntimeError("Cannot commit Kafka offset: consumer is not initialized.")
+
+        try:
+            topic_partitions = [
+                confluent_kafka.TopicPartition(topic, partition, next_offset)
+                for (topic, partition), next_offset in target_offsets.items()
+            ]
+            partitions = self._consumer.commit(
+                offsets=topic_partitions,
+                asynchronous=False,
+            )
+            if not partitions:
+                raise RuntimeError("Kafka returned no offset commit confirmation.")
+
+            for tp in partitions:
+                err = getattr(tp, "error", None)
+                if err is not None:
+                    err_val = err() if callable(err) else err
+                    if err_val:
+                        raise RuntimeError(
+                            f"Broker returned partition error during offset commit: {err_val}"
+                        )
+
+            for (topic, partition), next_offset in target_offsets.items():
+                self.committed_offsets[f"{topic}:{partition}"] = next_offset
+            self.messages_committed += message_count
+            logger.debug(
+                "Committed batch offsets for %d partitions: %s",
+                len(target_offsets),
+                target_offsets,
+            )
+        except Exception as e:
+            logger.error("Failed to commit batch offsets to Kafka broker: %s", e)
             raise
 
     def close(self):

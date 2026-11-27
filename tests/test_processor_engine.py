@@ -143,3 +143,52 @@ def test_process_terminal_conflict_quarantine():
     assert r2.status == "quarantined"
     assert "invalid_state_transition" in r2.error_reason
     assert len(repo.dead_letter_events) == 1
+
+
+def test_process_batch_contract():
+    """Verify that process_batch processes multiple events atomically in memory."""
+    repo = InMemoryRepository()
+    processor = StreamProcessor(repository=repo)
+    now = datetime.now(timezone.utc)
+
+    batch = [
+        {
+            "event_id": "EVT-BATCH-01",
+            "event_type": "ride.requested",
+            "schema_version": 1,
+            "occurred_at": now.isoformat(),
+            "produced_at": now.isoformat(),
+            "producer": "streamforge-test",
+            "payload": {
+                "ride_id": "RIDE-B-01",
+                "rider_id": "usr_1",
+                "pickup_city": "Koramangala",
+                "dropoff_city": "Indiranagar",
+                "fare_amount": "150.00",
+            },
+        },
+        {
+            "event_id": "EVT-BATCH-02",
+            "event_type": "ride.requested",
+            "schema_version": 1,
+            "occurred_at": now.isoformat(),
+            "produced_at": now.isoformat(),
+            "producer": "streamforge-test",
+            "payload": {
+                "ride_id": "RIDE-B-02",
+                "rider_id": "usr_2",
+                "pickup_city": "Whitefield",
+                "dropoff_city": "HSR Layout",
+                "fare_amount": "280.00",
+            },
+        },
+    ]
+
+    res = processor.process_batch(batch)
+    assert res.accepted_count == 2
+    assert res.duplicate_count == 0
+    assert res.quarantined_count == 0
+    assert len(res.results) == 2
+    assert res.results[0].status == "accepted"
+    assert res.results[1].status == "accepted"
+    assert len(repo.rides) == 2

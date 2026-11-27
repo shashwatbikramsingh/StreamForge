@@ -17,7 +17,7 @@ from streamforge.events.schemas import (
     RideCancelledPayload,
 )
 from streamforge.events.geography import BengaluruZone
-from streamforge.storage.repository import InMemoryRepository
+from streamforge.storage.repository import InMemoryRepository, BatchItem
 
 
 def test_idempotent_event_insertion():
@@ -158,3 +158,159 @@ def test_dead_letter_quarantine():
     assert dlq_id.startswith("DLQ-")
     assert repo.dead_letter_events[dlq_id]["error_reason"] == "invalid_state_transition"
     assert repo.dead_letter_events[dlq_id]["source_partition"] == 2
+
+
+def test_inmemory_persist_events_batch_all_accepted():
+    """Verify batch persistence of valid events in InMemoryRepository."""
+    repo = InMemoryRepository()
+    now = datetime.now(timezone.utc)
+    items = []
+    for i in range(5):
+        event = RideEvent(
+            event_id=f"EVT-INMEM-B1-{i}",
+            event_type=RideEventType.REQUESTED,
+            occurred_at=now,
+            produced_at=now,
+            producer="streamforge-test",
+            payload=RideRequestedPayload(
+                ride_id=f"RIDE-INMEM-B1-{i}",
+                rider_id="RIDER-01",
+                pickup_city=BengaluruZone.KORAMANGALA,
+                dropoff_city=BengaluruZone.INDIRANAGAR,
+                fare_amount=Decimal("150.00"),
+            ),
+        )
+        items.append(BatchItem(event=event, source_partition=0, source_offset=i))
+
+    result = repo.persist_events_batch(items)
+    assert result.accepted_count == 5
+    assert result.duplicate_count == 0
+    assert result.quarantined_count == 0
+    assert len(repo.processed_events) == 5
+    assert len(repo.rides) == 5
+
+
+def test_inmemory_persist_events_batch_mixed_duplicates():
+    """Verify batch persistence with duplicates in InMemoryRepository."""
+    repo = InMemoryRepository()
+    now = datetime.now(timezone.utc)
+    event1 = RideEvent(
+        event_id="EVT-DUP-01",
+        event_type=RideEventType.REQUESTED,
+        occurred_at=now,
+        produced_at=now,
+        producer="streamforge-test",
+        payload=RideRequestedPayload(
+            ride_id="RIDE-DUP-01",
+            rider_id="RIDER-01",
+            pickup_city=BengaluruZone.KORAMANGALA,
+            dropoff_city=BengaluruZone.INDIRANAGAR,
+            fare_amount=Decimal("150.00"),
+        ),
+    )
+    event2 = RideEvent(
+        event_id="EVT-DUP-02",
+        event_type=RideEventType.REQUESTED,
+        occurred_at=now,
+        produced_at=now,
+        producer="streamforge-test",
+        payload=RideRequestedPayload(
+            ride_id="RIDE-DUP-02",
+            rider_id="RIDER-02",
+            pickup_city=BengaluruZone.HSR_LAYOUT,
+            dropoff_city=BengaluruZone.WHITEFIELD,
+            fare_amount=Decimal("250.00"),
+        ),
+    )
+    items = [
+        BatchItem(event=event1, source_partition=0, source_offset=0),
+        BatchItem(event=event2, source_partition=0, source_offset=1),
+        BatchItem(event=event1, source_partition=0, source_offset=2), # duplicate
+    ]
+
+    result = repo.persist_events_batch(items)
+    assert result.accepted_count == 2
+    assert result.duplicate_count == 1
+    assert result.quarantined_count == 0
+    assert repo.pipeline_counters["duplicates_ignored"] == 1
+
+
+def test_inmemory_persist_events_batch_terminal_conflict_isolated_to_dlq():
+    """Verify batch persistence isolates terminal conflicts to DLQ while accepting valid events."""
+    repo = InMemoryRepository()
+    now = datetime.now(timezone.utc)
+    ride_comp_id = "RIDE-COMP-01"
+
+    # Set up completed ride
+    evt_req = RideEvent(
+        event_id="EVT-COMP-REQ",
+        event_type=RideEventType.REQUESTED,
+        occurred_at=now,
+        produced_at=now,
+        producer="streamforge-test",
+        payload=RideRequestedPayload(
+            ride_id=ride_comp_id,
+            rider_id="RIDER-01",
+            pickup_city=BengaluruZone.ELECTRONIC_CITY,
+            dropoff_city=BengaluruZone.WHITEFIELD,
+            fare_amount=Decimal("200.00"),
+        ),
+    )
+    evt_comp = RideEvent(
+        event_id="EVT-COMP-FIN",
+        event_type=RideEventType.COMPLETED,
+        occurred_at=now + timedelta(minutes=10),
+        produced_at=now + timedelta(minutes=10),
+        producer="streamforge-test",
+        payload=RideCompletedPayload(
+            ride_id=ride_comp_id,
+            driver_id="DRIVER-01",
+            fare_amount=Decimal("200.00"),
+            distance_km=Decimal("9.50"),
+            duration_seconds=1100,
+        ),
+    )
+    repo.persist_event_and_projection(evt_req)
+    repo.persist_event_and_projection(evt_comp)
+
+    # Batch with 1 valid new event and 1 terminal conflict
+    evt_valid = RideEvent(
+        event_id="EVT-VALID-NEW",
+        event_type=RideEventType.REQUESTED,
+        occurred_at=now,
+        produced_at=now,
+        producer="streamforge-test",
+        payload=RideRequestedPayload(
+            ride_id="RIDE-VALID-NEW",
+            rider_id="RIDER-02",
+            pickup_city=BengaluruZone.KORAMANGALA,
+            dropoff_city=BengaluruZone.INDIRANAGAR,
+            fare_amount=Decimal("120.00"),
+        ),
+    )
+    evt_conf = RideEvent(
+        event_id="EVT-CONFLICT-CAN",
+        event_type=RideEventType.CANCELLED,
+        occurred_at=now + timedelta(minutes=15),
+        produced_at=now + timedelta(minutes=15),
+        producer="streamforge-test",
+        payload=RideCancelledPayload(
+            ride_id=ride_comp_id,
+            cancelled_by="rider",
+            cancellation_reason="Late cancellation",
+        ),
+    )
+    items = [
+        BatchItem(event=evt_valid, source_partition=0, source_offset=10),
+        BatchItem(event=evt_conf, source_partition=0, source_offset=11),
+    ]
+
+    result = repo.persist_events_batch(items)
+    assert result.accepted_count == 1
+    assert result.duplicate_count == 0
+    assert result.quarantined_count == 1
+
+    assert result.item_results[0].status == "accepted"
+    assert result.item_results[1].status == "quarantined"
+    assert result.item_results[1].dlq_id.startswith("DLQ-")
+    assert "Terminal conflict" in result.item_results[1].error_reason

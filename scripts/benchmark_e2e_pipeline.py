@@ -65,6 +65,8 @@ def run_benchmark(
     partitions: int = 3,
     seed: int = 42,
     drain_timeout_seconds: float = 180.0,
+    batch_size: int = 50,
+    batch_timeout_ms: float = 100.0,
 ) -> Dict[str, Any]:
     if event_count <= 0 or event_count % 4 != 0:
         raise ValueError("event_count must be positive and divisible by 4 (4 events per ride lifecycle)")
@@ -136,30 +138,30 @@ def run_benchmark(
             while not stop_consumer.is_set():
                 if processed >= event_count:
                     break
-                result = worker.poll_and_process(timeout_seconds=0.2)
-                if result is not None:
+                batch_res = worker.poll_and_process_batch(
+                    max_batch_size=batch_size,
+                    batch_timeout_ms=batch_timeout_ms,
+                )
+                if batch_res is not None:
                     last_commit_perf = time.perf_counter()
                     if not consumer_started_at:
                         consumer_started_at.append(last_commit_perf)
-                    processed += 1
+                    processed += len(batch_res.results)
                     consumer_status["processed"] = processed
-                    if result.status == "accepted":
-                        accepted_count += 1
-                    elif result.status == "duplicate":
-                        duplicate_count += 1
-                    elif result.status in ("quarantined", "dlq_quarantined"):
-                        quarantined_count += 1
-                    elif result.status in ("failed", "error"):
-                        failed_count += 1
+                    accepted_count += batch_res.accepted_count
+                    duplicate_count += batch_res.duplicate_count
+                    quarantined_count += batch_res.quarantined_count
+                    for r in batch_res.results:
+                        if r.status in ("failed", "error"):
+                            failed_count += 1
+                        if r.event_id in publish_perf_by_id:
+                            lat = (last_commit_perf - publish_perf_by_id[r.event_id]) * 1000.0
+                            enqueue_to_offset_commit_ms.append(max(0.0, lat))
 
                     if worker.last_stage_timing is not None:
                         stage_timings.append(worker.last_stage_timing)
-
-                    if result.event_id in publish_perf_by_id:
-                        lat = (last_commit_perf - publish_perf_by_id[result.event_id]) * 1000.0
-                        enqueue_to_offset_commit_ms.append(max(0.0, lat))
                 elif producer_done.is_set():
-                    time.sleep(0.05)
+                    time.sleep(0.005)
         finally:
             consumer_stage_timings = list(stage_timings)
             consumer_metrics = {
@@ -308,6 +310,9 @@ def run_benchmark(
             },
             "consumer": {
                 **consumer_metrics,
+                "batch_size": batch_size,
+                "batch_timeout_ms": batch_timeout_ms,
+                "batches_processed": len(consumer_stage_timings),
                 "drain_seconds": round(drain_duration, 3),
             },
             "postgres": {
@@ -375,6 +380,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rate", type=float, default=10.0, help="Target event publication rate in EPS (default: 10)")
     parser.add_argument("--partitions", type=int, default=3, help="Temporary Kafka topic partitions (default: 3)")
     parser.add_argument("--seed", type=int, default=42, help="Deterministic generator seed (default: 42)")
+    parser.add_argument("--batch-size", type=int, default=50, help="Consumer micro-batch size (default: 50)")
+    parser.add_argument("--batch-timeout-ms", type=float, default=100.0, help="Consumer micro-batch timeout in ms (default: 100.0)")
     parser.add_argument("--drain-timeout", type=float, default=180.0, help="Consumer drain timeout in seconds (default: 180)")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     return parser.parse_args()
@@ -393,6 +400,8 @@ def main() -> int:
             partitions=args.partitions,
             seed=args.seed,
             drain_timeout_seconds=args.drain_timeout,
+            batch_size=args.batch_size,
+            batch_timeout_ms=args.batch_timeout_ms,
         )
     except Exception as exc:
         logger.exception("BENCHMARK FAILED: %s", exc)

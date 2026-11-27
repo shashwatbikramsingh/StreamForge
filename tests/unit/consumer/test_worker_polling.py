@@ -57,6 +57,22 @@ class RecordingProcessor:
             raise self.error
         return SimpleNamespace(status="quarantined", error_reason="deserialization failure")
 
+    def process_batch(self, messages, **kwargs) -> SimpleNamespace:
+        self.calls.append({"batch": messages})
+        if self.error:
+            raise self.error
+        results = [
+            SimpleNamespace(status="accepted", event_id=f"EVT-{i}", latency_ms=1.0)
+            for i in range(len(messages))
+        ]
+        return SimpleNamespace(
+            results=results,
+            accepted_count=len(messages),
+            duplicate_count=0,
+            quarantined_count=0,
+            total_latency_ms=1.0 * len(messages),
+        )
+
 
 class MockKafkaConsumer:
     """Mock Kafka consumer for polling and error testing."""
@@ -74,10 +90,33 @@ class MockKafkaConsumer:
             return self.poll_messages.pop(0)
         return None
 
-    def commit(self, message=None, asynchronous=True):
+    def commit(self, message=None, offsets=None, asynchronous=True):
         if self.commit_error:
             raise self.commit_error
-        return [SimpleNamespace(topic=message.topic(), partition=message.partition(), offset=message.offset() + 1, error=None)]
+        if offsets:
+            return [
+                SimpleNamespace(
+                    topic=tp.topic,
+                    partition=tp.partition,
+                    offset=tp.offset,
+                    error=None,
+                )
+                for tp in offsets
+            ]
+        return [
+            SimpleNamespace(
+                topic=message.topic(),
+                partition=message.partition(),
+                offset=message.offset() + 1,
+                error=None,
+            )
+        ]
+
+    def consume(self, num_messages=1, timeout=-1):
+        msgs = []
+        for _ in range(min(num_messages, len(self.poll_messages))):
+            msgs.append(self.poll_messages.pop(0))
+        return msgs
 
 
 def test_negative_timeout_rejected():
@@ -253,3 +292,60 @@ def test_commit_failure_halts_consumer_and_prevents_subsequent_polling(monkeypat
 
     assert len(processor.calls) == 1
     assert worker.messages_committed == 0
+
+
+def test_poll_and_process_batch_negative_parameters_rejected():
+    """Test 10: Negative batch_size or timeout_seconds raises ValueError."""
+    processor = RecordingProcessor()
+    worker = StreamConsumerWorker(processor=processor, dry_run=True)
+
+    with pytest.raises(ValueError, match="max_batch_size must be positive"):
+        worker.poll_and_process_batch(max_batch_size=0)
+
+    with pytest.raises(ValueError, match="timeout_seconds must be non-negative"):
+        worker.poll_and_process_batch(timeout_seconds=-0.1)
+
+
+def test_poll_and_process_batch_with_mock_consumer_multi_partition_commits(monkeypatch):
+    """Test 11: Batch polling across multiple partitions commits highest contiguous delivered offsets."""
+    msg_p0_a = MockMessage(topic="streamforge.rides.v1", partition=0, offset=10, key=None, value=b'{"event_id": "p0-10"}')
+    msg_p0_b = MockMessage(topic="streamforge.rides.v1", partition=0, offset=15, key=None, value=b'{"event_id": "p0-15"}')
+    msg_p1 = MockMessage(topic="streamforge.rides.v1", partition=1, offset=5, key=None, value=b'{"event_id": "p1-5"}')
+
+    mock_consumer = MockKafkaConsumer(poll_messages=[msg_p0_a, msg_p0_b, msg_p1])
+    monkeypatch.setattr(worker_module.confluent_kafka, "Consumer", lambda cfg: mock_consumer)
+
+    processor = RecordingProcessor()
+    worker = StreamConsumerWorker(processor=processor, dry_run=False)
+
+    res = worker.poll_and_process_batch(max_batch_size=10)
+
+    assert res is not None
+    assert worker.messages_processed == 3
+    assert worker.messages_committed == 3
+    assert worker.committed_offsets["streamforge.rides.v1:0"] == 16
+    assert worker.committed_offsets["streamforge.rides.v1:1"] == 6
+
+
+def test_poll_and_process_batch_commit_failure_halts_worker(monkeypatch):
+    """Test 12: Broker commit failure during batch halts worker and blocks subsequent processing."""
+    msg = MockMessage(topic="streamforge.rides.v1", partition=0, offset=40, key=None, value=b'{"event_id": "40"}')
+
+    mock_consumer = MockKafkaConsumer(
+        poll_messages=[msg],
+        commit_error=RuntimeError("Group coordinator not available"),
+    )
+    monkeypatch.setattr(worker_module.confluent_kafka, "Consumer", lambda cfg: mock_consumer)
+
+    processor = RecordingProcessor()
+    worker = StreamConsumerWorker(processor=processor, dry_run=False)
+
+    with pytest.raises(RuntimeError, match="Group coordinator not available"):
+        worker.poll_and_process_batch()
+
+    assert worker._halted is True
+    assert "offset commit failure" in worker._halt_reason
+    assert worker.messages_committed == 0
+
+    with pytest.raises(RuntimeError, match="Consumer worker is halted after an uncommitted failure"):
+        worker.poll_and_process_batch()

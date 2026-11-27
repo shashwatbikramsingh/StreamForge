@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from threading import RLock
-from typing import Optional, Dict, Any, Tuple, Literal
+from typing import Optional, Dict, Any, Tuple, Literal, List
 
 from streamforge.events.schemas import (
     RideEvent,
@@ -51,6 +51,36 @@ class EventPersistenceResult:
         return self.status == "conflict"
 
 
+@dataclass(frozen=True)
+class BatchItem:
+    """An event with its Kafka source coordinates."""
+    event: RideEvent
+    source_partition: int
+    source_offset: int
+    ingested_at: Optional[datetime] = None
+    source_topic: str = "streamforge.rides.v1"
+
+
+@dataclass(frozen=True)
+class BatchItemResult:
+    """Outcome for an individual record in a batch."""
+    event_id: str
+    status: Literal["accepted", "duplicate", "quarantined", "failed"]
+    source_partition: int
+    source_offset: int
+    error_reason: Optional[str] = None
+    dlq_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class BatchPersistenceResult:
+    """Aggregated outcome of an atomic batch persistence transaction."""
+    item_results: List[BatchItemResult]
+    accepted_count: int
+    duplicate_count: int
+    quarantined_count: int
+
+
 class EventRepository(ABC):
     """Abstract interface for StreamForge storage repository."""
 
@@ -71,6 +101,16 @@ class EventRepository(ABC):
             conflict: Invalid lifecycle transition; event not persisted.
         The processor is responsible for writing conflicts to the DLQ
         after this method has returned and its transaction has ended.
+        """
+        pass
+
+    @abstractmethod
+    def persist_events_batch(
+        self,
+        items: List[BatchItem],
+    ) -> BatchPersistenceResult:
+        """
+        Atomically persist a batch of events and update their ride projections.
         """
         pass
 
@@ -176,6 +216,78 @@ class InMemoryRepository(EventRepository):
                 ingested_at=ingested_at,
             )
             return EventPersistenceResult(status="accepted")
+
+    def persist_events_batch(
+        self,
+        items: List[BatchItem],
+    ) -> BatchPersistenceResult:
+        """Atomically persist a batch in memory."""
+        if not items:
+            return BatchPersistenceResult([], 0, 0, 0)
+
+        with self._lock:
+            snapshot_events = set(self.processed_events)
+            snapshot_rides = {k: dict(v) for k, v in self.rides.items()}
+            snapshot_counters = dict(self.pipeline_counters)
+            snapshot_dlq = dict(self.dead_letter_events)
+            try:
+                results: List[BatchItemResult] = []
+                accepted = 0
+                duplicates = 0
+                quarantined = 0
+
+                for item in items:
+                    res = self.persist_event_and_projection(
+                        event=item.event,
+                        ingested_at=item.ingested_at,
+                        source_topic=item.source_topic,
+                        source_partition=item.source_partition,
+                        source_offset=item.source_offset,
+                    )
+                    if res.status == "accepted":
+                        results.append(BatchItemResult(
+                            event_id=item.event.event_id,
+                            status="accepted",
+                            source_partition=item.source_partition,
+                            source_offset=item.source_offset,
+                        ))
+                        accepted += 1
+                    elif res.status == "duplicate":
+                        results.append(BatchItemResult(
+                            event_id=item.event.event_id,
+                            status="duplicate",
+                            source_partition=item.source_partition,
+                            source_offset=item.source_offset,
+                        ))
+                        duplicates += 1
+                    elif res.status == "conflict":
+                        dlq_id = self.insert_dead_letter(
+                            event_id=item.event.event_id,
+                            ride_id=item.event.ride_id,
+                            raw_payload=item.event.payload.model_dump(mode="json"),
+                            error_reason=res.conflict_reason or "Terminal state conflict",
+                            source_partition=item.source_partition,
+                            source_offset=item.source_offset,
+                            source_topic=item.source_topic,
+                            failure_category="invalid_state_transition",
+                        )
+                        results.append(BatchItemResult(
+                            event_id=item.event.event_id,
+                            status="quarantined",
+                            source_partition=item.source_partition,
+                            source_offset=item.source_offset,
+                            error_reason=res.conflict_reason,
+                            dlq_id=dlq_id,
+                        ))
+                        quarantined += 1
+
+                return BatchPersistenceResult(results, accepted, duplicates, quarantined)
+            except Exception:
+                self.processed_events = snapshot_events
+                self.rides = snapshot_rides
+                self.pipeline_counters = snapshot_counters
+                self.dead_letter_events = snapshot_dlq
+                raise
 
     def insert_processed_event(self, event: RideEvent, ingested_at: Optional[datetime] = None) -> bool:
         """

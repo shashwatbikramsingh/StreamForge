@@ -21,6 +21,7 @@ from streamforge.events.schemas import (
     RideStartedPayload,
 )
 from streamforge.storage.postgres_repository import PostgresRepository
+from streamforge.storage.repository import BatchItem
 
 
 @pytest.fixture(scope="module")
@@ -220,3 +221,237 @@ def test_live_dlq_quarantine_in_independent_transaction(live_repo, test_ids):
             assert row["ride_id"] == test_ids["ride_id"]
             assert row["failure_category"] == "invalid_state_transition"
             assert "Terminal conflict" in row["failure_reason"]
+
+
+# ---------------------------------------------------------------------
+# Live PostgreSQL 16 Micro-Batch Tests
+# ---------------------------------------------------------------------
+
+def test_live_persist_events_batch_all_accepted(live_repo):
+    """Live Test 6: Atomically persist a batch of 50 valid events to PostgreSQL."""
+    now = datetime.now(timezone.utc)
+    batch_uid = uuid.uuid4().hex[:8]
+    items = []
+    for i in range(50):
+        ride_id = f"RIDE-LIVE-B1-{batch_uid}-{i:03d}"
+        evt_id = f"EVT-LIVE-B1-{batch_uid}-{i:03d}"
+        event = RideEvent(
+            event_id=evt_id,
+            event_type=RideEventType.REQUESTED,
+            occurred_at=now,
+            produced_at=now,
+            producer="streamforge-live-test",
+            payload=RideRequestedPayload(
+                ride_id=ride_id,
+                rider_id=f"RIDER-{i:03d}",
+                pickup_city=BengaluruZone.KORAMANGALA,
+                dropoff_city=BengaluruZone.INDIRANAGAR,
+                fare_amount=Decimal("250.00"),
+            ),
+        )
+        items.append(BatchItem(event=event, source_partition=0, source_offset=i))
+
+    result = live_repo.persist_events_batch(items)
+
+    assert result.accepted_count == 50
+    assert result.duplicate_count == 0
+    assert result.quarantined_count == 0
+    assert len(result.item_results) == 50
+    assert all(r.status == "accepted" for r in result.item_results)
+
+    # Verify directly via PostgreSQL query
+    with live_repo._connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM processed_events WHERE producer = 'streamforge-live-test' AND ride_id LIKE %s;",
+                (f"RIDE-LIVE-B1-{batch_uid}-%",),
+            )
+            ev_count = cur.fetchone()["count"]
+            assert ev_count == 50
+
+            cur.execute(
+                "SELECT COUNT(*) FROM rides WHERE ride_id LIKE %s AND status = 'ride.requested';",
+                (f"RIDE-LIVE-B1-{batch_uid}-%",),
+            )
+            ride_count = cur.fetchone()["count"]
+            assert ride_count == 50
+
+
+def test_live_persist_events_batch_mixed_duplicates(live_repo):
+    """Live Test 7: Batch containing 40 new and 10 duplicate events correctly ignores duplicates and updates counters."""
+    now = datetime.now(timezone.utc)
+    batch_uid = uuid.uuid4().hex[:8]
+    initial_dups = live_repo.get_counter("duplicates_ignored")
+
+    # Step 1: Pre-populate 10 events
+    pre_items = []
+    for i in range(10):
+        ride_id = f"RIDE-LIVE-B2-{batch_uid}-{i:03d}"
+        evt_id = f"EVT-LIVE-B2-{batch_uid}-{i:03d}"
+        event = RideEvent(
+            event_id=evt_id,
+            event_type=RideEventType.REQUESTED,
+            occurred_at=now,
+            produced_at=now,
+            producer="streamforge-live-test",
+            payload=RideRequestedPayload(
+                ride_id=ride_id,
+                rider_id=f"RIDER-{i:03d}",
+                pickup_city=BengaluruZone.HSR_LAYOUT,
+                dropoff_city=BengaluruZone.WHITEFIELD,
+                fare_amount=Decimal("300.00"),
+            ),
+        )
+        pre_items.append(BatchItem(event=event, source_partition=0, source_offset=i))
+
+    pre_res = live_repo.persist_events_batch(pre_items)
+    assert pre_res.accepted_count == 10
+
+    # Step 2: Create a batch with 40 new items + the 10 pre-existing items
+    mixed_items = []
+    # 40 new items (indices 10..49)
+    for i in range(10, 50):
+        ride_id = f"RIDE-LIVE-B2-{batch_uid}-{i:03d}"
+        evt_id = f"EVT-LIVE-B2-{batch_uid}-{i:03d}"
+        event = RideEvent(
+            event_id=evt_id,
+            event_type=RideEventType.REQUESTED,
+            occurred_at=now,
+            produced_at=now,
+            producer="streamforge-live-test",
+            payload=RideRequestedPayload(
+                ride_id=ride_id,
+                rider_id=f"RIDER-{i:03d}",
+                pickup_city=BengaluruZone.HSR_LAYOUT,
+                dropoff_city=BengaluruZone.WHITEFIELD,
+                fare_amount=Decimal("300.00"),
+            ),
+        )
+        mixed_items.append(BatchItem(event=event, source_partition=0, source_offset=i))
+    # Add the 10 duplicates
+    mixed_items.extend(pre_items)
+
+    mixed_res = live_repo.persist_events_batch(mixed_items)
+
+    assert mixed_res.accepted_count == 40
+    assert mixed_res.duplicate_count == 10
+    assert mixed_res.quarantined_count == 0
+
+    new_dups = live_repo.get_counter("duplicates_ignored")
+    assert new_dups - initial_dups == 10
+
+
+def test_live_persist_events_batch_terminal_conflict_isolated_to_dlq(live_repo):
+    """Live Test 8: Conflicted item rolls back savepoint and writes to DLQ; valid item commits."""
+    now = datetime.now(timezone.utc)
+    batch_uid = uuid.uuid4().hex[:8]
+
+    # Pre-condition: Create a completed ride
+    ride_completed_id = f"RIDE-LIVE-B3-COMPLETED-{batch_uid}"
+    evt_req = RideEvent(
+        event_id=f"EVT-LIVE-B3-REQ-{batch_uid}",
+        event_type=RideEventType.REQUESTED,
+        occurred_at=now,
+        produced_at=now,
+        producer="streamforge-live-test",
+        payload=RideRequestedPayload(
+            ride_id=ride_completed_id,
+            rider_id="RIDER-COMP",
+            pickup_city=BengaluruZone.ELECTRONIC_CITY,
+            dropoff_city=BengaluruZone.MARATHAHALLI,
+            fare_amount=Decimal("180.00"),
+        ),
+    )
+    evt_comp = RideEvent(
+        event_id=f"EVT-LIVE-B3-COMP-{batch_uid}",
+        event_type=RideEventType.COMPLETED,
+        occurred_at=now,
+        produced_at=now,
+        producer="streamforge-live-test",
+        payload=RideCompletedPayload(
+            ride_id=ride_completed_id,
+            driver_id="DRIVER-LIVE-01",
+            fare_amount=Decimal("180.00"),
+            distance_km=Decimal("7.20"),
+            duration_seconds=840,
+        ),
+    )
+    live_repo.persist_event_and_projection(evt_req)
+    live_repo.persist_event_and_projection(evt_comp)
+
+    # Batch with:
+    # 1. Valid new ride
+    # 2. Invalid cancel on completed ride
+    ride_valid_id = f"RIDE-LIVE-B3-VALID-{batch_uid}"
+    evt_valid = RideEvent(
+        event_id=f"EVT-LIVE-B3-VALID-{batch_uid}",
+        event_type=RideEventType.REQUESTED,
+        occurred_at=now,
+        produced_at=now,
+        producer="streamforge-live-test",
+        payload=RideRequestedPayload(
+            ride_id=ride_valid_id,
+            rider_id="RIDER-VALID",
+            pickup_city=BengaluruZone.KORAMANGALA,
+            dropoff_city=BengaluruZone.WHITEFIELD,
+            fare_amount=Decimal("400.00"),
+        ),
+    )
+    evt_conflicted_id = f"EVT-LIVE-B3-CONF-{batch_uid}"
+    evt_conflict = RideEvent(
+        event_id=evt_conflicted_id,
+        event_type=RideEventType.CANCELLED,
+        occurred_at=now,
+        produced_at=now,
+        producer="streamforge-live-test",
+        payload=RideCancelledPayload(
+            ride_id=ride_completed_id,
+            cancelled_by="rider",
+            cancellation_reason="Late cancellation",
+        ),
+    )
+
+    items = [
+        BatchItem(event=evt_valid, source_partition=1, source_offset=50),
+        BatchItem(event=evt_conflict, source_partition=1, source_offset=51),
+    ]
+
+    result = live_repo.persist_events_batch(items)
+
+    assert result.accepted_count == 1
+    assert result.duplicate_count == 0
+    assert result.quarantined_count == 1
+
+    assert result.item_results[0].status == "accepted"
+    assert result.item_results[1].status == "quarantined"
+    dlq_id = result.item_results[1].dlq_id
+    assert dlq_id.startswith("DLQ-")
+
+    # DB Checks:
+    with live_repo._connection() as conn:
+        with conn.cursor() as cur:
+            # Valid event persisted
+            cur.execute("SELECT COUNT(*) FROM processed_events WHERE event_id = %s;", (evt_valid.event_id,))
+            assert cur.fetchone()["count"] == 1
+            cur.execute("SELECT status FROM rides WHERE ride_id = %s;", (ride_valid_id,))
+            assert cur.fetchone()["status"] == "ride.requested"
+
+            # Conflicted event rolled back from processed_events!
+            cur.execute("SELECT COUNT(*) FROM processed_events WHERE event_id = %s;", (evt_conflicted_id,))
+            assert cur.fetchone()["count"] == 0
+
+            # Conflicted event committed to dead_letter_events!
+            cur.execute("SELECT * FROM dead_letter_events WHERE event_id = %s;", (evt_conflicted_id,))
+            dlq_row = cur.fetchone()
+            assert dlq_row is not None
+            assert dlq_row["failure_category"] == "invalid_state_transition"
+            assert "Terminal conflict" in dlq_row["failure_reason"]
+
+
+def test_live_persist_events_batch_empty_short_circuit(live_repo):
+    """Live Test 9: Empty batch returns empty result immediately."""
+    result = live_repo.persist_events_batch([])
+    assert result.accepted_count == 0
+    assert result.duplicate_count == 0
+    assert result.quarantined_count == 0
+    assert result.item_results == []

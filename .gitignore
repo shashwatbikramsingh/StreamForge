@@ -48,4 +48,5 @@ ENV/
 # Local Scratch & Backups
 scratch/
 *.backup
+*.zip
 

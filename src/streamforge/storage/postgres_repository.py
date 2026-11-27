@@ -11,7 +11,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -28,6 +28,9 @@ from streamforge.events.schemas import (
     RideCancelledPayload,
 )
 from streamforge.storage.repository import (
+    BatchItem,
+    BatchItemResult,
+    BatchPersistenceResult,
     EventPersistenceResult,
     EventRepository,
 )
@@ -294,6 +297,167 @@ class PostgresRepository(EventRepository):
             # Transaction has rolled back, leaving processed_events clean
             return EventPersistenceResult(status="conflict", conflict_reason=exc.message)
 
+    def persist_events_batch(
+        self,
+        items: List[BatchItem],
+    ) -> BatchPersistenceResult:
+        """
+        Atomically persist a batch of events and update their ride projections.
+
+        Uses one pooled database connection and one outer PostgreSQL transaction.
+        Nested transactions (savepoints) isolate terminal projection conflicts per item
+        without aborting the entire batch. Conflicted items are quarantined to
+        dead_letter_events within the outer transaction. Unhandled database errors
+        roll back the entire outer transaction and propagate.
+
+        If items is empty, immediately returns an empty result without checking
+        out a connection.
+        """
+        if not items:
+            return BatchPersistenceResult(
+                item_results=[],
+                accepted_count=0,
+                duplicate_count=0,
+                quarantined_count=0,
+            )
+
+        insert_event_sql = """
+            INSERT INTO processed_events (
+                event_id, ride_id, event_type, schema_version,
+                occurred_at, produced_at, ingested_at, producer,
+                payload, source_topic, source_partition, source_offset
+            ) VALUES (
+                %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s, %s
+            )
+            ON CONFLICT (event_id) DO NOTHING
+            RETURNING id;
+        """
+
+        item_results: List[BatchItemResult] = []
+        accepted_count = 0
+        duplicate_count = 0
+        quarantined_count = 0
+
+        with self._connection() as conn:
+            with conn.transaction():
+                for item in items:
+                    if not item.source_topic.strip():
+                        raise ValueError("source_topic cannot be empty.")
+                    if item.source_partition < 0 or item.source_offset < 0:
+                        raise ValueError("Kafka partition and offset must be non-negative.")
+
+                    ingest_time = item.ingested_at or datetime.now(timezone.utc)
+                    payload_json = Jsonb(item.event.payload.model_dump(mode="json"))
+
+                    fields = _extract_ride_update_fields(item.event)
+                    upsert_params = {
+                        "ride_id": item.event.ride_id,
+                        "status": item.event.event_type.value,
+                        "status_rank": item.event.lifecycle_rank,
+                        **fields,
+                    }
+
+                    try:
+                        # Nested transaction context acts as a SAVEPOINT in psycopg 3
+                        with conn.transaction():
+                            with conn.cursor() as cur:
+                                # 1. Idempotent insertion into processed_events
+                                cur.execute(
+                                    insert_event_sql,
+                                    (
+                                        item.event.event_id,
+                                        item.event.ride_id,
+                                        item.event.event_type.value,
+                                        item.event.schema_version,
+                                        item.event.occurred_at,
+                                        item.event.produced_at,
+                                        ingest_time,
+                                        item.event.producer,
+                                        payload_json,
+                                        item.source_topic,
+                                        item.source_partition,
+                                        item.source_offset,
+                                    ),
+                                )
+                                event_row = cur.fetchone()
+
+                                # Duplicate check: zero rows inserted
+                                if event_row is None:
+                                    self._increment_counter_with_conn(conn, "duplicates_ignored", 1)
+                                    item_results.append(
+                                        BatchItemResult(
+                                            event_id=item.event.event_id,
+                                            status="duplicate",
+                                            source_partition=item.source_partition,
+                                            source_offset=item.source_offset,
+                                        )
+                                    )
+                                    duplicate_count += 1
+                                    continue
+
+                                # 2. Update projection with serialized conflict checking
+                                cur.execute(_UPSERT_RIDE_PROJECTION_SQL, upsert_params)
+                                proj_row = cur.fetchone()
+
+                                # Terminal conflict: WHERE condition on conflict DO UPDATE evaluated to False
+                                if proj_row is None:
+                                    cur.execute(
+                                        "SELECT status FROM rides WHERE ride_id = %s;",
+                                        (item.event.ride_id,),
+                                    )
+                                    existing = cur.fetchone()
+                                    existing_status = existing["status"] if existing else "UNKNOWN"
+                                    conflict_msg = (
+                                        f"Terminal conflict: cannot transition from {existing_status} "
+                                        f"to {item.event.event_type.value}"
+                                    )
+                                    raise _TerminalConflictException(conflict_msg)
+
+                                item_results.append(
+                                    BatchItemResult(
+                                        event_id=item.event.event_id,
+                                        status="accepted",
+                                        source_partition=item.source_partition,
+                                        source_offset=item.source_offset,
+                                    )
+                                )
+                                accepted_count += 1
+
+                    except _TerminalConflictException as exc:
+                        # Savepoint rolled back tentative insert into processed_events.
+                        # Now persist DLQ entry inside the outer transaction.
+                        dlq_id = self._insert_dead_letter_with_conn(
+                            conn=conn,
+                            event_id=item.event.event_id,
+                            raw_payload=item.event.payload.model_dump(mode="json"),
+                            error_reason=exc.message,
+                            source_partition=item.source_partition,
+                            source_offset=item.source_offset,
+                            source_topic=item.source_topic,
+                            failure_category="invalid_state_transition",
+                            ride_id=item.event.ride_id,
+                        )
+                        item_results.append(
+                            BatchItemResult(
+                                event_id=item.event.event_id,
+                                status="quarantined",
+                                source_partition=item.source_partition,
+                                source_offset=item.source_offset,
+                                error_reason=exc.message,
+                                dlq_id=dlq_id,
+                            )
+                        )
+                        quarantined_count += 1
+
+        return BatchPersistenceResult(
+            item_results=item_results,
+            accepted_count=accepted_count,
+            duplicate_count=duplicate_count,
+            quarantined_count=quarantined_count,
+        )
+
     def insert_processed_event(
         self,
         event: RideEvent,
@@ -368,8 +532,9 @@ class PostgresRepository(EventRepository):
                         return False, conflict_msg
                     return True, None
 
-    def insert_dead_letter(
+    def _insert_dead_letter_with_conn(
         self,
+        conn: Any,
         event_id: Optional[str],
         raw_payload: Dict[str, Any],
         error_reason: str,
@@ -380,9 +545,7 @@ class PostgresRepository(EventRepository):
         failure_category: str = "validation_error",
         ride_id: Optional[str] = None,
     ) -> str:
-        """
-        Persist a quarantined record into dead_letter_events in an independent transaction.
-        """
+        """Persist a quarantined record into dead_letter_events using an existing connection."""
         if not source_topic.strip():
             raise ValueError("source_topic cannot be empty.")
         if source_partition < 0 or source_offset < 0:
@@ -425,25 +588,52 @@ class PostgresRepository(EventRepository):
             RETURNING id;
         """
 
+        with conn.cursor() as cur:
+            cur.execute(
+                insert_dlq_sql,
+                (
+                    safe_event_id,
+                    safe_ride_id,
+                    source_topic,
+                    source_partition,
+                    source_offset,
+                    failure_category,
+                    bounded_reason,
+                    bounded_payload,
+                ),
+            )
+            row = cur.fetchone()
+            dlq_id = f"DLQ-{row['id']:06d}" if row else "DLQ-UNKNOWN"
+            return dlq_id
+
+    def insert_dead_letter(
+        self,
+        event_id: Optional[str],
+        raw_payload: Dict[str, Any],
+        error_reason: str,
+        source_partition: int = 0,
+        source_offset: int = 0,
+        *,
+        source_topic: str = "streamforge.rides.v1",
+        failure_category: str = "validation_error",
+        ride_id: Optional[str] = None,
+    ) -> str:
+        """
+        Persist a quarantined record into dead_letter_events in an independent transaction.
+        """
         with self._connection() as conn:
             with conn.transaction():
-                with conn.cursor() as cur:
-                    cur.execute(
-                        insert_dlq_sql,
-                        (
-                            safe_event_id,
-                            safe_ride_id,
-                            source_topic,
-                            source_partition,
-                            source_offset,
-                            failure_category,
-                            bounded_reason,
-                            bounded_payload,
-                        ),
-                    )
-                    row = cur.fetchone()
-                    dlq_id = f"DLQ-{row['id']:06d}" if row else "DLQ-UNKNOWN"
-                    return dlq_id
+                return self._insert_dead_letter_with_conn(
+                    conn=conn,
+                    event_id=event_id,
+                    raw_payload=raw_payload,
+                    error_reason=error_reason,
+                    source_partition=source_partition,
+                    source_offset=source_offset,
+                    source_topic=source_topic,
+                    failure_category=failure_category,
+                    ride_id=ride_id,
+                )
 
     def increment_counter(self, counter_name: str, delta: int = 1) -> int:
         """Atomically increment a persistent pipeline counter."""
