@@ -103,11 +103,12 @@ def run_benchmark(
     publish_perf_by_id: Dict[str, float] = {}
     consumer_ready_at: Optional[float] = None
     last_commit_perf: Optional[float] = None
+    consumer_stage_timings: List[Any] = []
 
     repo = PostgresRepository()
 
     def consumer_worker_thread():
-        nonlocal consumer_metrics, consumer_ready_at, last_commit_perf
+        nonlocal consumer_metrics, consumer_ready_at, last_commit_perf, consumer_stage_timings
         consumer_repo = PostgresRepository()
         processor = StreamProcessor(repository=consumer_repo)
         consumer_config = {
@@ -129,6 +130,7 @@ def run_benchmark(
         duplicate_count = 0
         quarantined_count = 0
         failed_count = 0
+        stage_timings: List[Any] = []
 
         try:
             while not stop_consumer.is_set():
@@ -150,12 +152,16 @@ def run_benchmark(
                     elif result.status in ("failed", "error"):
                         failed_count += 1
 
+                    if worker.last_stage_timing is not None:
+                        stage_timings.append(worker.last_stage_timing)
+
                     if result.event_id in publish_perf_by_id:
                         lat = (last_commit_perf - publish_perf_by_id[result.event_id]) * 1000.0
                         enqueue_to_offset_commit_ms.append(max(0.0, lat))
                 elif producer_done.is_set():
                     time.sleep(0.05)
         finally:
+            consumer_stage_timings = list(stage_timings)
             consumer_metrics = {
                 "processed": processed,
                 "accepted": accepted_count,
@@ -325,6 +331,20 @@ def run_benchmark(
                         "returns; includes serialization/enqueue, Kafka availability, "
                         "processor + PostgreSQL transaction, and synchronous offset commit; "
                         "does not wait for the producer delivery callback"
+                    ),
+                },
+                "stages": {
+                    "poll_ms": summarize_latency([t.poll_ms for t in consumer_stage_timings]),
+                    "validation_ms": summarize_latency([t.validation_ms for t in consumer_stage_timings]),
+                    "db_persist_ms": summarize_latency([t.db_persist_ms for t in consumer_stage_timings]),
+                    "offset_commit_ms": summarize_latency([t.offset_commit_ms for t in consumer_stage_timings]),
+                    "total_processing_ms": summarize_latency([t.total_processing_ms for t in consumer_stage_timings]),
+                    "measurement": (
+                        "Empirical worker stages: poll_ms (fetch Kafka record), "
+                        "validation_ms (in-memory Pydantic validation), "
+                        "db_persist_ms (PostgreSQL pooled connection checkout + transaction commit), "
+                        "offset_commit_ms (synchronous Kafka broker offset confirmation), "
+                        "total_processing_ms (entire loop iteration)"
                     ),
                 },
             },

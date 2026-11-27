@@ -11,6 +11,7 @@ Responsibilities:
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, Literal
@@ -42,6 +43,8 @@ class StreamProcessor:
 
     def __init__(self, repository: EventRepository):
         self.repository = repository
+        self.last_validation_ms: float = 0.0
+        self.last_db_persist_ms: float = 0.0
 
     def process_deserialization_failure(
         self,
@@ -68,20 +71,25 @@ class StreamProcessor:
             )
 
         error_reason = result.error_reason
+        self.last_validation_ms = 0.0
 
         # No event or ride identity can be trusted when decoding failed.
         # UNKNOWN_EVENT_ID is only a presentation sentinel in ProcessResult.
         # PostgreSQL receives event_id=None.
-        dlq_id = self.repository.insert_dead_letter(
-            event_id=None,
-            ride_id=None,
-            raw_payload=result.raw_record,
-            error_reason=error_reason,
-            source_partition=source_partition,
-            source_offset=source_offset,
-            source_topic=source_topic,
-            failure_category="deserialization_error",
-        )
+        t_db_start = time.perf_counter()
+        try:
+            dlq_id = self.repository.insert_dead_letter(
+                event_id=None,
+                ride_id=None,
+                raw_payload=result.raw_record,
+                error_reason=error_reason,
+                source_partition=source_partition,
+                source_offset=source_offset,
+                source_topic=source_topic,
+                failure_category="deserialization_error",
+            )
+        finally:
+            self.last_db_persist_ms = max(0.0, (time.perf_counter() - t_db_start) * 1000.0)
 
         return ProcessResult(
             status="quarantined",
@@ -133,11 +141,14 @@ class StreamProcessor:
         )
 
         # Step 1: Validate payload against Pydantic schema
+        t_val_start = time.perf_counter()
         try:
             event = RideEvent.model_validate(raw_payload)
             event_id = event.event_id
             ride_id = event.ride_id
+            self.last_validation_ms = max(0.0, (time.perf_counter() - t_val_start) * 1000.0)
         except ValidationError as e:
+            self.last_validation_ms = max(0.0, (time.perf_counter() - t_val_start) * 1000.0)
             issues = e.errors(
                 include_input=False,
                 include_context=False,
@@ -152,16 +163,20 @@ class StreamProcessor:
                 "SchemaValidationError: " + "; ".join(safe_issues)
             )[:2000]
             logger.warning("Event %s failed schema validation: %s", event_id or "UNKNOWN", error_reason)
-            dlq_id = self.repository.insert_dead_letter(
-                event_id=event_id,
-                ride_id=ride_id,
-                raw_payload=raw_payload,
-                error_reason=error_reason,
-                source_partition=source_partition,
-                source_offset=source_offset,
-                source_topic=source_topic,
-                failure_category="validation_error",
-            )
+            t_db_start = time.perf_counter()
+            try:
+                dlq_id = self.repository.insert_dead_letter(
+                    event_id=event_id,
+                    ride_id=ride_id,
+                    raw_payload=raw_payload,
+                    error_reason=error_reason,
+                    source_partition=source_partition,
+                    source_offset=source_offset,
+                    source_topic=source_topic,
+                    failure_category="validation_error",
+                )
+            finally:
+                self.last_db_persist_ms = max(0.0, (time.perf_counter() - t_db_start) * 1000.0)
             return ProcessResult(
                 status="quarantined",
                 event_id=event_id or "UNKNOWN_EVENT_ID",
@@ -175,13 +190,18 @@ class StreamProcessor:
         latency_ms = max(0.0, (ingested_at - event.produced_at).total_seconds() * 1000.0)
 
         # Step 2: Atomic event persistence + ride projection.
-        persistence = self.repository.persist_event_and_projection(
-            event=event,
-            ingested_at=ingested_at,
-            source_topic=source_topic,
-            source_partition=source_partition,
-            source_offset=source_offset,
-        )
+        t_db_start = time.perf_counter()
+        try:
+            persistence = self.repository.persist_event_and_projection(
+                event=event,
+                ingested_at=ingested_at,
+                source_topic=source_topic,
+                source_partition=source_partition,
+                source_offset=source_offset,
+            )
+        finally:
+            self.last_db_persist_ms = max(0.0, (time.perf_counter() - t_db_start) * 1000.0)
+
         if persistence.status == "duplicate":
             return ProcessResult(
                 status="duplicate",
@@ -196,16 +216,20 @@ class StreamProcessor:
             )
             # This happens after atomic persistence has returned.
             # PostgreSQL's failed transaction will already have rolled back.
-            dlq_id = self.repository.insert_dead_letter(
-                event_id=event.event_id,
-                ride_id=event.ride_id,
-                raw_payload=raw_payload,
-                error_reason=error_reason,
-                source_partition=source_partition,
-                source_offset=source_offset,
-                source_topic=source_topic,
-                failure_category="invalid_state_transition",
-            )
+            t_dlq_start = time.perf_counter()
+            try:
+                dlq_id = self.repository.insert_dead_letter(
+                    event_id=event.event_id,
+                    ride_id=event.ride_id,
+                    raw_payload=raw_payload,
+                    error_reason=error_reason,
+                    source_partition=source_partition,
+                    source_offset=source_offset,
+                    source_topic=source_topic,
+                    failure_category="invalid_state_transition",
+                )
+            finally:
+                self.last_db_persist_ms += max(0.0, (time.perf_counter() - t_dlq_start) * 1000.0)
             return ProcessResult(
                 status="quarantined",
                 event_id=event.event_id,

@@ -13,6 +13,8 @@ Core invariants:
 """
 
 import logging
+import time
+from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from streamforge.config.settings import Settings, get_settings
 from streamforge.events.deserializer import deserialize_kafka_value
@@ -25,6 +27,16 @@ try:
     CONFLUENT_KAFKA_AVAILABLE = True
 except ImportError:
     CONFLUENT_KAFKA_AVAILABLE = False
+
+
+@dataclass(frozen=True)
+class StageTiming:
+    """Decoupled stage breakdown for a single consumer event loop iteration (in milliseconds)."""
+    poll_ms: float
+    validation_ms: float
+    db_persist_ms: float
+    offset_commit_ms: float
+    total_processing_ms: float
 
 
 class MockMessage:
@@ -94,6 +106,7 @@ class StreamConsumerWorker:
         # Prevent processing later offsets after an uncommitted failure.
         self._halted = False
         self._halt_reason: Optional[str] = None
+        self.last_stage_timing: Optional[StageTiming] = None
 
         # Explicit dry-run mode is permitted for tests and offline development.
         if self.dry_run:
@@ -189,7 +202,10 @@ class StreamConsumerWorker:
         if timeout_seconds < 0:
             raise ValueError("timeout_seconds must be non-negative.")
 
+        t_iter_start = time.perf_counter()
+
         # STEP 1: Retrieve one message.
+        t_poll_start = time.perf_counter()
         if self.dry_run:
             if not self._in_memory_queue:
                 return None
@@ -204,6 +220,8 @@ class StreamConsumerWorker:
             except Exception as e:
                 logger.error("Error while polling Kafka: %s", e)
                 raise
+        t_poll_end = time.perf_counter()
+        poll_ms = max(0.0, (t_poll_end - t_poll_start) * 1000.0)
 
         if msg is None:
             return None
@@ -260,8 +278,24 @@ class StreamConsumerWorker:
                 )
             # STEP 3: Processing or quarantine completed successfully.
             self.messages_processed += 1
+
             # STEP 4: Commit only after repository operation succeeds.
+            t_commit_start = time.perf_counter()
             self._commit_offset(msg)
+            t_commit_end = time.perf_counter()
+            commit_ms = max(0.0, (t_commit_end - t_commit_start) * 1000.0)
+
+            val_ms = getattr(self.processor, "last_validation_ms", 0.0)
+            db_ms = getattr(self.processor, "last_db_persist_ms", 0.0)
+            total_proc_ms = max(0.0, (time.perf_counter() - t_iter_start) * 1000.0)
+
+            self.last_stage_timing = StageTiming(
+                poll_ms=round(poll_ms, 3),
+                validation_ms=round(val_ms, 3),
+                db_persist_ms=round(db_ms, 3),
+                offset_commit_ms=round(commit_ms, 3),
+                total_processing_ms=round(total_proc_ms, 3),
+            )
             return result
         except Exception as e:
             self._halted = True
