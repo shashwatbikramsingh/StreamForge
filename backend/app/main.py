@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import logging
 import asyncio
@@ -12,6 +13,20 @@ from pydantic import BaseModel, Field
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("streamforge.api")
+
+def parse_payload(val: Any) -> Dict[str, Any]:
+    """Safely parses JSON payload from PostgreSQL JSONB or text columns."""
+    if not val:
+        return {}
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, dict) else {"raw": parsed}
+        except Exception:
+            return {"raw": val}
+    return {}
 
 # Optional asyncpg pool
 db_pool = None
@@ -32,7 +47,7 @@ async def lifespan(app: FastAPI):
             )
             logger.info("[*] PostgreSQL connection pool initialized successfully.")
         except Exception as e:
-            logger.warning(f"[!] PostgreSQL unavailable ({e}). Falling back to simulation mode.")
+            logger.warning(f"[!] PostgreSQL unavailable ({e}). Database connection pool could not be created.")
             db_pool = None
     yield
     if db_pool:
@@ -79,7 +94,7 @@ class HealthStatus(BaseModel):
 class MetricsOverview(BaseModel):
     generated_at: datetime
     time_basis: str
-    currency: str
+    currency: str = "INR"
     total_events: int
     processing_rate_per_sec: float
     success_rate_percent: float
@@ -90,7 +105,9 @@ class MetricsOverview(BaseModel):
     total_completed_fare_inr: float
     active_drivers: int
     p95_ingestion_latency_ms: float
-    data_source: str = "simulated"
+    data_source: str = "postgresql"
+    duplicate_events: int = 0
+    failed_events: int = 0
 
 class RecentEvent(BaseModel):
     event_id: str
@@ -103,6 +120,8 @@ class RecentEvent(BaseModel):
     latency_ms: float = 4.2
     partition: str = "P-01"
     occurred_at: datetime
+    payload: Optional[Dict[str, Any]] = None
+    dedup_hash: Optional[str] = None
 
 class DLQEvent(BaseModel):
     dlq_id: str
@@ -112,7 +131,10 @@ class DLQEvent(BaseModel):
     error_type: str
     error_message: str
     received_at: datetime
-    is_resolved: bool
+    is_resolved: bool = False
+    event_id: Optional[str] = None
+    ride_id: Optional[str] = None
+    attempt_count: int = 1
 
 class PipelineComponentHealth(BaseModel):
     name: str
@@ -144,192 +166,322 @@ def health_live():
 @app.get("/health/ready", response_model=HealthStatus, tags=["Health"])
 async def health_ready():
     """Readiness probe checking readiness of dependencies."""
-    is_ready = True
-    if db_pool:
-        try:
-            async with db_pool.acquire() as conn:
-                await conn.execute("SELECT 1")
-        except Exception:
-            is_ready = False
+    if db_pool is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection pool is not initialized",
+        )
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute("SELECT 1")
+    except Exception as e:
+        logger.error(f"Readiness probe failed on database check: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database connection check failed: {e}",
+        )
+
     return HealthStatus(
-        status="ready" if is_ready else "degraded",
+        status="ready",
         timestamp=datetime.now(timezone.utc),
-        database_connected=db_pool is not None and is_ready,
+        database_connected=True,
     )
 
 @app.get("/api/v1/metrics/overview", response_model=MetricsOverview, tags=["Metrics"])
 async def get_metrics_overview(
     time_basis: str = Query("event_time", description="'event_time' or 'ingested_at'"),
 ):
-    """Returns high-level throughput, cohort statistics, and latency metrics."""
-    if db_pool:
-        try:
-            async with db_pool.acquire() as conn:
-                row = await conn.fetchrow("""
-                    SELECT 
-                        COUNT(*) as total_rides,
-                        COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed,
-                        COUNT(*) FILTER (WHERE status = 'CANCELLED') as cancelled,
-                        COALESCE(SUM(fare_amount) FILTER (WHERE status = 'COMPLETED'), 0) as total_fare,
-                        COUNT(DISTINCT driver_id) FILTER (WHERE driver_id IS NOT NULL) as active_drivers
-                    FROM rides
-                """)
-                if row and row["total_rides"] > 0:
-                    completed = row["completed"] or 0
-                    cancelled = row["cancelled"] or 0
-                    total_events = 128450 + row["total_rides"]
-                    return MetricsOverview(
-                        generated_at=datetime.now(timezone.utc),
-                        time_basis=time_basis,
-                        currency="INR",
-                        total_events=total_events,
-                        processing_rate_per_sec=842.0,
-                        success_rate_percent=98.7,
-                        failed_events_percent=1.3,
-                        completed_rides=completed,
-                        cancelled_terminal_rides=cancelled,
-                        cancellation_rate=round(cancelled / max(completed + cancelled, 1), 4),
-                        total_completed_fare_inr=float(row["total_fare"]),
-                        active_drivers=row["active_drivers"] or 1420,
-                        p95_ingestion_latency_ms=18.4,
-                        data_source="postgresql",
-                    )
-        except Exception as e:
-            logger.warning(f"[!] Error querying metrics from PostgreSQL: {e}")
+    """Returns high-level throughput, cohort statistics, and latency metrics directly from PostgreSQL."""
+    if db_pool is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service unavailable",
+        )
 
-    # Fallback simulation
-    return MetricsOverview(
-        generated_at=datetime.now(timezone.utc),
-        time_basis=time_basis,
-        currency="INR",
-        total_events=128450 + random.randint(10, 500),
-        processing_rate_per_sec=round(842.0 + random.uniform(-15.0, 15.0), 1),
-        success_rate_percent=98.7,
-        failed_events_percent=1.3,
-        completed_rides=48210,
-        cancelled_terminal_rides=2140,
-        cancellation_rate=round(2140 / (48210 + 2140), 4),
-        total_completed_fare_inr=18452390.50,
-        active_drivers=1420,
-        p95_ingestion_latency_ms=18.4,
-        data_source="simulated",
-    )
+    try:
+        async with db_pool.acquire() as conn:
+            # 1. Query rides projections for completed, cancelled, total fare, and active drivers
+            rides_row = await conn.fetchrow("""
+                SELECT 
+                    COUNT(*) as total_rides,
+                    COUNT(*) FILTER (WHERE status = 'ride.completed') as completed,
+                    COUNT(*) FILTER (WHERE status = 'ride.cancelled') as cancelled,
+                    COALESCE(SUM(final_fare) FILTER (WHERE status = 'ride.completed'), 0) as total_fare,
+                    COUNT(DISTINCT driver_id) FILTER (WHERE driver_id IS NOT NULL AND status IN ('ride.accepted', 'ride.started')) as active_drivers
+                FROM rides
+            """)
+
+            # 2. Query processed_events for total processed count, recent throughput (last 60s), and p95 latency
+            events_row = await conn.fetchrow("""
+                SELECT 
+                    COUNT(*) as total_processed,
+                    COUNT(*) FILTER (WHERE ingested_at >= NOW() - INTERVAL '60 seconds') as recent_processed,
+                    COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (
+                        ORDER BY EXTRACT(EPOCH FROM (ingested_at - produced_at)) * 1000.0
+                    ), 0.0) as p95_latency_ms
+                FROM processed_events
+            """)
+
+            # 3. Query dead_letter_events for failed/quarantined count
+            dlq_row = await conn.fetchrow("""
+                SELECT COUNT(*) as total_dlq FROM dead_letter_events
+            """)
+
+            # 4. Query pipeline_counters for persistent duplicate count
+            counter_row = await conn.fetchrow("""
+                SELECT COALESCE(metric_value, 0) as duplicates_ignored
+                FROM pipeline_counters
+                WHERE metric_key = 'duplicates_ignored'
+            """)
+
+            total_processed = int(events_row["total_processed"]) if events_row else 0
+            total_dlq = int(dlq_row["total_dlq"]) if dlq_row else 0
+            duplicates_ignored = int(counter_row["duplicates_ignored"]) if counter_row else 0
+
+            # Total events represents processed + DLQ quarantined + duplicates ignored
+            total_events = total_processed + total_dlq + duplicates_ignored
+
+            completed = int(rides_row["completed"]) if rides_row else 0
+            cancelled = int(rides_row["cancelled"]) if rides_row else 0
+            total_completed_fare = float(rides_row["total_fare"]) if rides_row else 0.0
+            active_drivers = int(rides_row["active_drivers"]) if rides_row else 0
+
+            recent_processed = int(events_row["recent_processed"]) if events_row else 0
+            processing_rate_per_sec = round(recent_processed / 60.0, 2)
+            p95_latency = max(0.0, round(float(events_row["p95_latency_ms"]), 2)) if events_row else 0.0
+
+            if completed + cancelled > 0:
+                cancellation_rate = round(cancelled / (completed + cancelled), 4)
+            else:
+                cancellation_rate = 0.0
+
+            if total_events > 0:
+                success_rate_percent = round((total_processed / total_events) * 100.0, 2)
+                failed_events_percent = round((total_dlq / total_events) * 100.0, 2)
+            else:
+                success_rate_percent = 100.0
+                failed_events_percent = 0.0
+
+            return MetricsOverview(
+                generated_at=datetime.now(timezone.utc),
+                time_basis=time_basis,
+                currency="INR",
+                total_events=total_events,
+                processing_rate_per_sec=processing_rate_per_sec,
+                success_rate_percent=success_rate_percent,
+                failed_events_percent=failed_events_percent,
+                completed_rides=completed,
+                cancelled_terminal_rides=cancelled,
+                cancellation_rate=cancellation_rate,
+                total_completed_fare_inr=total_completed_fare,
+                active_drivers=active_drivers,
+                p95_ingestion_latency_ms=p95_latency,
+                data_source="postgresql",
+                duplicate_events=duplicates_ignored,
+                failed_events=total_dlq,
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error querying metrics from PostgreSQL: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to query operational metrics: {e}",
+        )
 
 @app.get("/api/v1/events/recent", response_model=List[RecentEvent], tags=["Events"])
 async def get_recent_events(limit: int = Query(10, ge=1, le=100)):
-    """Returns the most recent events passing through the pipeline."""
-    if db_pool:
-        try:
-            async with db_pool.acquire() as conn:
-                rows = await conn.fetch("""
-                    SELECT ride_id, pickup_city, dropoff_city, status, fare_amount, updated_at
-                    FROM rides
-                    ORDER BY updated_at DESC
-                    LIMIT $1
-                """, limit)
-                if rows:
-                    return [
-                        RecentEvent(
-                            event_id=f"EVT-{str(r['ride_id'])[:8]}",
-                            ride_id=f"RIDE-{str(r['ride_id'])[:8]}",
-                            event_type=f"RIDE_{r['status']}",
-                            pickup_city=r["pickup_city"],
-                            dropoff_city=r["dropoff_city"],
-                            fare_amount=float(r["fare_amount"]),
-                            status="Failed" if r["status"] == "CANCELLED" else "Success",
-                            latency_ms=round(random.uniform(3.0, 7.5), 1),
-                            partition=f"P-0{random.randint(0, 3)}",
-                            occurred_at=r["updated_at"],
-                        )
-                        for r in rows
-                    ]
-        except Exception as e:
-            logger.warning(f"[!] Error querying events from PostgreSQL: {e}")
+    """Returns the most recent events passing through the pipeline directly from PostgreSQL."""
+    if db_pool is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service unavailable",
+        )
 
-    # Fallback simulation
-    event_types = ["RIDE_REQUESTED", "RIDE_ACCEPTED", "RIDE_STARTED", "RIDE_COMPLETED", "RIDE_CANCELLED"]
-    cities = ["Koramangala", "Indiranagar", "HSR Layout", "Whitefield", "Bellandur", "Electronic City", "MG Road"]
-    
-    events = []
-    for i in range(limit):
-        p_city = random.choice(cities)
-        d_city = random.choice([c for c in cities if c != p_city])
-        etype = random.choice(event_types)
-        is_failed = etype == "RIDE_CANCELLED" or random.random() < 0.05
-        
-        events.append(RecentEvent(
-            event_id=f"EVT-{random.randint(10000, 99999)}",
-            ride_id=f"RIDE-{random.randint(1000, 9999)}",
-            event_type=etype,
-            pickup_city=p_city,
-            dropoff_city=d_city,
-            fare_amount=round(random.uniform(120.0, 750.0), 2),
-            status="Failed" if is_failed else "Success",
-            latency_ms=round(random.uniform(3.0, 8.0), 1),
-            partition="P-00 (DLQ)" if is_failed else f"P-0{random.randint(1, 3)}",
-            occurred_at=datetime.now(timezone.utc),
-        ))
-    return events
+    try:
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT 
+                    pe.event_id,
+                    pe.ride_id,
+                    pe.event_type,
+                    COALESCE(r.pickup_city, pe.payload->>'pickup_city', 'Koramangala') as pickup_city,
+                    COALESCE(r.dropoff_city, pe.payload->>'dropoff_city', 'Indiranagar') as dropoff_city,
+                    COALESCE(
+                        r.final_fare, 
+                        r.estimated_fare, 
+                        (pe.payload->>'fare_amount')::numeric, 
+                        (pe.payload->>'final_fare')::numeric,
+                        (pe.payload->>'estimated_fare')::numeric,
+                        0.0
+                    ) as fare_amount,
+                    CASE 
+                        WHEN pe.event_type = 'ride.cancelled' THEN 'Failed'
+                        ELSE 'Success'
+                    END as status,
+                    ROUND(COALESCE(EXTRACT(EPOCH FROM (pe.ingested_at - pe.produced_at)) * 1000.0, 0.0)::numeric, 2) as latency_ms,
+                    COALESCE('P-0' || pe.source_partition::text, 'P-00') as partition,
+                    pe.occurred_at,
+                    pe.payload
+                FROM processed_events pe
+                LEFT JOIN rides r ON pe.ride_id = r.ride_id
+                ORDER BY pe.id DESC
+                LIMIT $1
+            """, limit)
+
+            return [
+                RecentEvent(
+                    event_id=r["event_id"],
+                    ride_id=r["ride_id"],
+                    event_type=r["event_type"],
+                    pickup_city=r["pickup_city"],
+                    dropoff_city=r["dropoff_city"],
+                    fare_amount=float(r["fare_amount"]),
+                    status=r["status"],
+                    latency_ms=max(0.0, float(r["latency_ms"])),
+                    partition=r["partition"],
+                    occurred_at=r["occurred_at"],
+                    payload=parse_payload(r["payload"]),
+                    dedup_hash=f"0x{r['event_id'][:4]}...{r['event_id'][-4:]}" if len(r["event_id"]) >= 8 else "0x4a12...8e01",
+                )
+                for r in rows
+            ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error querying recent events from PostgreSQL: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to query recent events: {e}",
+        )
 
 @app.get("/api/v1/dlq/events", response_model=List[DLQEvent], tags=["DLQ"])
 async def get_dlq_events(limit: int = Query(10, ge=1, le=50)):
-    """Returns unparseable or rejected events quarantined in the Dead Letter Queue."""
-    if db_pool:
-        try:
-            async with db_pool.acquire() as conn:
-                rows = await conn.fetch("""
-                    SELECT dlq_id, topic, partition_id, offset_value, error_type, error_message, received_at, is_resolved
-                    FROM dead_letter_queue
-                    ORDER BY received_at DESC
-                    LIMIT $1
-                """, limit)
-                if rows:
-                    return [
-                        DLQEvent(
-                            dlq_id=str(r["dlq_id"]),
-                            topic=r["topic"],
-                            partition_id=r["partition_id"],
-                            offset_value=r["offset_value"],
-                            error_type=r["error_type"],
-                            error_message=r["error_message"],
-                            received_at=r["received_at"],
-                            is_resolved=r["is_resolved"],
-                        )
-                        for r in rows
-                    ]
-        except Exception as e:
-            logger.warning(f"[!] Error querying DLQ from PostgreSQL: {e}")
-
-    # Fallback simulated DLQ item
-    return [
-        DLQEvent(
-            dlq_id="dlq-94821a-uuid",
-            topic="ride-events",
-            partition_id=2,
-            offset_value=184920,
-            error_type="MALFORMED_CORRUPTED_EVENT",
-            error_message="SchemaValidationError: Missing required field 'schema_version'",
-            received_at=datetime.now(timezone.utc),
-            is_resolved=False,
+    """Returns quarantined events from PostgreSQL dead_letter_events table."""
+    if db_pool is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service unavailable",
         )
-    ]
+
+    try:
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT 
+                    id, 
+                    event_id, 
+                    ride_id, 
+                    source_topic, 
+                    source_partition, 
+                    source_offset, 
+                    failure_category, 
+                    failure_reason, 
+                    failed_at, 
+                    attempt_count
+                FROM dead_letter_events
+                ORDER BY failed_at DESC
+                LIMIT $1
+            """, limit)
+
+            return [
+                DLQEvent(
+                    dlq_id=str(r["id"]),
+                    topic=r["source_topic"],
+                    partition_id=r["source_partition"],
+                    offset_value=r["source_offset"],
+                    error_type=r["failure_category"],
+                    error_message=r["failure_reason"],
+                    received_at=r["failed_at"],
+                    is_resolved=False,
+                    event_id=r["event_id"],
+                    ride_id=r["ride_id"],
+                    attempt_count=r["attempt_count"],
+                )
+                for r in rows
+            ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error querying DLQ events from PostgreSQL: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to query DLQ events: {e}",
+        )
 
 @app.get("/api/v1/pipeline/health", response_model=PipelineHealthSummary, tags=["Pipeline"])
-def get_pipeline_health():
-    """Returns status breakdown for all components in the StreamForge pipeline."""
+async def get_pipeline_health():
+    """Returns real operational status for all components in the StreamForge pipeline."""
+    # 1. Kafka Broker health via TCP connect check
+    kafka_status = "degraded"
+    kafka_latency = 0.0
+    kafka_host_port = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
+    try:
+        parts = kafka_host_port.split(",")
+        first_broker = parts[0].strip()
+        host, port_str = first_broker.split(":")[-2:]
+        host = host.replace("//", "")
+        port = int(port_str)
+        t0 = asyncio.get_event_loop().time()
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port),
+            timeout=2.0
+        )
+        writer.close()
+        await writer.wait_closed()
+        kafka_latency = round((asyncio.get_event_loop().time() - t0) * 1000.0, 2)
+        kafka_status = "healthy"
+    except Exception as e:
+        logger.warning(f"Kafka healthcheck failed: {e}")
+        kafka_status = "failed"
+
+    # 2. PostgreSQL health via db_pool SELECT 1
+    pg_status = "failed"
+    pg_latency = 0.0
+    proc_rate = 0
+    if db_pool:
+        try:
+            t0 = asyncio.get_event_loop().time()
+            async with db_pool.acquire() as conn:
+                await conn.execute("SELECT 1")
+                pg_latency = round((asyncio.get_event_loop().time() - t0) * 1000.0, 2)
+                pg_status = "healthy"
+
+                # Check recent stream processor throughput (last 60s)
+                row = await conn.fetchrow("""
+                    SELECT COUNT(*) as recent_count 
+                    FROM processed_events 
+                    WHERE ingested_at >= NOW() - INTERVAL '60 seconds'
+                """)
+                recent = int(row["recent_count"]) if row else 0
+                proc_rate = round(recent / 60.0)
+        except Exception as e:
+            logger.warning(f"PostgreSQL healthcheck failed: {e}")
+            pg_status = "failed"
+
+    proc_status = "healthy" if (pg_status == "healthy" and kafka_status == "healthy") else "degraded"
+
     components = [
-        PipelineComponentHealth(name="Event Generator (Python)", status="healthy", latency_ms=1.2, throughput_per_sec=850),
-        PipelineComponentHealth(name="Kafka Broker (KRaft)", status="healthy", latency_ms=4.8, throughput_per_sec=850),
-        PipelineComponentHealth(name="Stream Processing (Spark)", status="healthy", latency_ms=12.4, throughput_per_sec=845),
-        PipelineComponentHealth(name="PostgreSQL Data Store", status="healthy" if db_pool else "degraded", latency_ms=8.1, throughput_per_sec=842),
-        PipelineComponentHealth(name="FastAPI Telemetry Layer", status="healthy", latency_ms=1.5, throughput_per_sec=120),
+        PipelineComponentHealth(name="Event Generator (Python)", status=kafka_status, latency_ms=kafka_latency, throughput_per_sec=proc_rate),
+        PipelineComponentHealth(name="Kafka Broker (KRaft)", status=kafka_status, latency_ms=kafka_latency, throughput_per_sec=proc_rate),
+        PipelineComponentHealth(name="Stream Processor & Validator (Python)", status=proc_status, latency_ms=pg_latency, throughput_per_sec=proc_rate),
+        PipelineComponentHealth(name="PostgreSQL Data Store", status=pg_status, latency_ms=pg_latency, throughput_per_sec=proc_rate),
+        PipelineComponentHealth(name="FastAPI Telemetry Layer", status="healthy", latency_ms=1.2, throughput_per_sec=proc_rate),
     ]
+
+    running_nodes = sum(1 for c in components if c.status == "healthy")
+    degraded_nodes = sum(1 for c in components if c.status == "degraded")
+    failed_nodes = sum(1 for c in components if c.status == "failed")
+    healthy_percent = round((running_nodes / len(components)) * 100.0, 1)
+
+    overall_status = "healthy" if failed_nodes == 0 and degraded_nodes == 0 else "degraded"
+
     return PipelineHealthSummary(
-        status="healthy",
-        healthy_percent=98.7,
-        running_nodes=4 if db_pool else 3,
-        degraded_nodes=0 if db_pool else 1,
-        failed_nodes=0,
+        status=overall_status,
+        healthy_percent=healthy_percent,
+        running_nodes=running_nodes,
+        degraded_nodes=degraded_nodes,
+        failed_nodes=failed_nodes,
         components=components,
     )
 
@@ -345,19 +497,50 @@ async def websocket_telemetry(websocket: WebSocket):
     try:
         while True:
             now = datetime.now(timezone.utc)
-            metrics = {
-                "type": "METRIC_PULSE",
-                "timestamp": now.isoformat(),
-                "events_per_sec": round(842.0 + random.uniform(-18.0, 18.0), 1),
-                "total_events": 128450 + random.randint(10, 500),
-                "success_rate": 98.7,
-                "dlq_rate": 1.3,
-                "p95_latency_ms": round(random.uniform(14.0, 22.0), 1),
-                "cluster_health": "HEALTHY",
-                "active_partitions": 4,
-            }
-            await websocket.send_json(metrics)
-            await asyncio.sleep(1.5)
+            if db_pool:
+                try:
+                    async with db_pool.acquire() as conn:
+                        events_row = await conn.fetchrow("""
+                            SELECT 
+                                COUNT(*) as total_processed,
+                                COUNT(*) FILTER (WHERE ingested_at >= NOW() - INTERVAL '60 seconds') as recent_processed,
+                                COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (
+                                    ORDER BY EXTRACT(EPOCH FROM (ingested_at - produced_at)) * 1000.0
+                                ), 0.0) as p95_latency_ms
+                            FROM processed_events
+                        """)
+                        dlq_row = await conn.fetchrow("SELECT COUNT(*) as total_dlq FROM dead_letter_events")
+                        counter_row = await conn.fetchrow("""
+                            SELECT COALESCE(metric_value, 0) as duplicates_ignored
+                            FROM pipeline_counters
+                            WHERE metric_key = 'duplicates_ignored'
+                        """)
+                        
+                        total_p = int(events_row["total_processed"]) if events_row else 0
+                        total_d = int(dlq_row["total_dlq"]) if dlq_row else 0
+                        total_dup = int(counter_row["duplicates_ignored"]) if counter_row else 0
+                        total = total_p + total_d + total_dup
+                        recent = int(events_row["recent_processed"]) if events_row else 0
+                        rate = round(recent / 60.0, 1)
+                        p95 = max(0.0, round(float(events_row["p95_latency_ms"]), 1)) if events_row else 0.0
+                        success_rate = round((total_p / total) * 100.0, 1) if total > 0 else 100.0
+                        dlq_rate = round((total_d / total) * 100.0, 1) if total > 0 else 0.0
+                        
+                        metrics = {
+                            "type": "METRIC_PULSE",
+                            "timestamp": now.isoformat(),
+                            "events_per_sec": rate,
+                            "total_events": total,
+                            "success_rate": success_rate,
+                            "dlq_rate": dlq_rate,
+                            "p95_latency_ms": p95,
+                            "cluster_health": "HEALTHY",
+                            "active_partitions": 3,
+                        }
+                        await websocket.send_json(metrics)
+                except Exception as e:
+                    logger.warning(f"Error querying telemetry for websocket: {e}")
+            await asyncio.sleep(2.0)
     except WebSocketDisconnect:
         logger.info("[*] WebSocket client disconnected from /ws/telemetry")
     except Exception as e:
@@ -368,29 +551,74 @@ async def websocket_events(websocket: WebSocket):
     """Real-time WebSocket streaming live event feed directly to connected clients."""
     await websocket.accept()
     logger.info("[*] WebSocket client connected to /ws/events")
-    event_types = ["RIDE_REQUESTED", "RIDE_ACCEPTED", "RIDE_STARTED", "RIDE_COMPLETED", "RIDE_CANCELLED"]
-    cities = ["Koramangala", "Indiranagar", "HSR Layout", "Whitefield", "Bellandur", "Electronic City", "MG Road"]
+    last_seen_id = 0
     try:
+        # Initialize last_seen_id to current max(id) - 5 so client sees immediate recent events
+        if db_pool:
+            try:
+                async with db_pool.acquire() as conn:
+                    row = await conn.fetchrow("SELECT COALESCE(MAX(id), 0) as max_id FROM processed_events")
+                    max_id = int(row["max_id"]) if row else 0
+                    last_seen_id = max(0, max_id - 5)
+            except Exception as e:
+                logger.warning(f"Could not get initial max(id): {e}")
+
         while True:
-            p_city = random.choice(cities)
-            d_city = random.choice([c for c in cities if c != p_city])
-            etype = random.choice(event_types)
-            is_failed = etype == "RIDE_CANCELLED" or random.random() < 0.05
-            evt = {
-                "type": "STREAM_EVENT",
-                "event_id": f"EVT-{random.randint(10000, 99999)}",
-                "ride_id": f"RIDE-{random.randint(1000, 9999)}",
-                "event_type": etype,
-                "pickup_city": p_city,
-                "dropoff_city": d_city,
-                "fare_amount": round(random.uniform(120.0, 750.0), 2),
-                "status": "Failed" if is_failed else "Success",
-                "latency_ms": round(random.uniform(2.5, 7.0), 1),
-                "partition": "P-00 (DLQ)" if is_failed else f"P-0{random.randint(1, 3)}",
-                "occurred_at": datetime.now(timezone.utc).isoformat(),
-            }
-            await websocket.send_json(evt)
-            await asyncio.sleep(2.0)
+            if db_pool:
+                try:
+                    async with db_pool.acquire() as conn:
+                        rows = await conn.fetch("""
+                            SELECT 
+                                pe.id,
+                                pe.event_id,
+                                pe.ride_id,
+                                pe.event_type,
+                                COALESCE(r.pickup_city, pe.payload->>'pickup_city', 'Koramangala') as pickup_city,
+                                COALESCE(r.dropoff_city, pe.payload->>'dropoff_city', 'Indiranagar') as dropoff_city,
+                                COALESCE(
+                                    r.final_fare, 
+                                    r.estimated_fare, 
+                                    (pe.payload->>'fare_amount')::numeric, 
+                                    (pe.payload->>'final_fare')::numeric,
+                                    (pe.payload->>'estimated_fare')::numeric,
+                                    0.0
+                                ) as fare_amount,
+                                CASE 
+                                    WHEN pe.event_type = 'ride.cancelled' THEN 'Failed'
+                                    ELSE 'Success'
+                                END as status,
+                                ROUND(COALESCE(EXTRACT(EPOCH FROM (pe.ingested_at - pe.produced_at)) * 1000.0, 0.0)::numeric, 2) as latency_ms,
+                                COALESCE('P-0' || pe.source_partition::text, 'P-00') as partition,
+                                pe.occurred_at,
+                                pe.payload
+                            FROM processed_events pe
+                            LEFT JOIN rides r ON pe.ride_id = r.ride_id
+                            WHERE pe.id > $1
+                            ORDER BY pe.id ASC
+                            LIMIT 5
+                        """, last_seen_id)
+
+                        for r in rows:
+                            last_seen_id = max(last_seen_id, int(r["id"]))
+                            evt = {
+                                "type": "STREAM_EVENT",
+                                "event_id": r["event_id"],
+                                "ride_id": r["ride_id"],
+                                "event_type": r["event_type"],
+                                "pickup_city": r["pickup_city"],
+                                "dropoff_city": r["dropoff_city"],
+                                "fare_amount": float(r["fare_amount"]),
+                                "status": r["status"],
+                                "latency_ms": max(0.0, float(r["latency_ms"])),
+                                "partition": r["partition"],
+                                "occurred_at": r["occurred_at"].isoformat(),
+                                "payload": parse_payload(r["payload"]),
+                                "dedup_hash": f"0x{r['event_id'][:4]}...{r['event_id'][-4:]}" if len(r["event_id"]) >= 8 else "0x4a12...8e01",
+                            }
+                            await websocket.send_json(evt)
+                except Exception as e:
+                    logger.warning(f"Error querying live events for websocket: {e}")
+            await asyncio.sleep(1.5)
     except WebSocketDisconnect:
         logger.info("[*] WebSocket client disconnected from /ws/events")
     except Exception as e:

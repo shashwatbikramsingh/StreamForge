@@ -21,6 +21,7 @@ StreamForge is a learning-focused real-time event streaming and analytics platfo
 | `frontend.md` | Streamlit dashboard implementation contract |
 | `api.md` | FastAPI endpoint and response contracts |
 | `database.md` | PostgreSQL tables, constraints, indexes and transactions |
+| `benchmarks.md` | Pipeline benchmark methodology, results, and saturation analysis |
 | `ai.md` | AI/ML future scope and guardrails |
 | `adr/0001-mvp-baseline-decisions.md` | Accepted MVP architecture and data decisions |
 
