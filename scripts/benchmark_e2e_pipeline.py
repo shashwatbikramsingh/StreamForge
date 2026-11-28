@@ -15,8 +15,9 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+from confluent_kafka import OFFSET_INVALID, TopicPartition
 from confluent_kafka.admin import AdminClient, NewTopic
 from streamforge.config.settings import get_settings
 from streamforge.consumer.worker import StreamConsumerWorker
@@ -46,6 +47,133 @@ def summarize_latency(values: List[float]) -> Dict[str, float]:
         "p50": round(percentile_nearest_rank(values, 50), 3),
         "p95": round(percentile_nearest_rank(values, 95), 3),
         "p99": round(percentile_nearest_rank(values, 99), 3),
+    }
+
+
+def summarize_lag_sampling(durations_ms: List[float]) -> Dict[str, Any]:
+    """Computes sample count, total overhead in seconds, and mean sample duration in ms."""
+    total_seconds = sum(durations_ms) / 1000.0
+    sample_count = len(durations_ms)
+    mean_ms = sum(durations_ms) / sample_count if sample_count else 0.0
+    return {
+        "samples": sample_count,
+        "total_sampling_overhead_seconds": round(total_seconds, 3),
+        "mean_sample_duration_ms": round(mean_ms, 3),
+    }
+
+
+def calculate_interval_intersection(
+    interval_start: float,
+    interval_end: float,
+    window_start: float,
+    window_end: float,
+) -> float:
+    """
+    Calculate the duration of intersection between [interval_start, interval_end]
+    and [window_start, window_end]. Returns 0.0 if there is no intersection or
+    if inputs are invalid/inverted.
+    """
+    if interval_end <= interval_start or window_end <= window_start:
+        return 0.0
+    start = max(interval_start, window_start)
+    end = min(interval_end, window_end)
+    return max(0.0, end - start)
+
+
+def calculate_total_in_window_overhead(
+    intervals: List[Tuple[float, float]],
+    window_start: float,
+    window_end: float,
+) -> float:
+    """Calculate the total duration (in seconds) of interval intersections within the window."""
+    total = sum(
+        calculate_interval_intersection(s, e, window_start, window_end)
+        for s, e in intervals
+    )
+    return round(total, 3)
+
+
+def calculate_partition_lag(
+    low: int,
+    high: int,
+    committed: int,
+) -> Dict[str, Any]:
+    """Calculate consumer lag using Kafka next-offset semantics."""
+    if low < 0 or high < low:
+        raise ValueError(
+            f"Invalid Kafka watermarks: low={low}, high={high}"
+        )
+    if committed == OFFSET_INVALID or committed < 0:
+        effective_offset = low
+        status = "uninitialized"
+        committed_value = None
+    else:
+        effective_offset = committed
+        status = "active"
+        committed_value = committed
+    return {
+        "lowwater": low,
+        "highwater": high,
+        "committed": committed_value,
+        "effective_offset": effective_offset,
+        "status": status,
+        "lag": max(0, high - effective_offset),
+    }
+
+
+def query_partition_lag(
+    consumer: Any,
+    topic: str,
+    partition_count: int,
+    timeout: float = 5.0,
+) -> Dict[str, Any]:
+    """Query broker watermarks and committed offsets for every partition."""
+    if partition_count <= 0:
+        raise ValueError("partition_count must be positive")
+
+    requested = [
+        TopicPartition(topic, partition)
+        for partition in range(partition_count)
+    ]
+
+    committed_partitions = consumer.committed(
+        requested,
+        timeout=timeout,
+    )
+
+    committed_by_partition = {}
+    for tp in committed_partitions:
+        if tp.error is not None:
+            raise RuntimeError(
+                f"Failed to fetch committed offset for "
+                f"partition {tp.partition}: {tp.error}"
+            )
+        committed_by_partition[tp.partition] = tp.offset
+
+    missing = set(range(partition_count)) - set(committed_by_partition)
+    if missing:
+        raise RuntimeError(
+            f"Kafka returned no committed-offset result for partitions: "
+            f"{sorted(missing)}"
+        )
+
+    by_partition = {}
+    total_lag = 0
+    for partition in range(partition_count):
+        tp = TopicPartition(topic, partition)
+        low, high = consumer.get_watermark_offsets(
+            tp,
+            timeout=timeout,
+            cached=False,
+        )
+        committed = committed_by_partition[partition]
+        part_lag = calculate_partition_lag(low, high, committed)
+        by_partition[partition] = part_lag
+        total_lag += part_lag["lag"]
+
+    return {
+        "by_partition": by_partition,
+        "total_lag": total_lag,
     }
 
 
@@ -99,6 +227,17 @@ def run_benchmark(
     consumer_started_at: List[float] = []
     consumer_metrics: Dict[str, Any] = {}
     consumer_status = {"processed": 0}
+    lag_sampling_durations_ms: List[float] = []
+    lag_sampling_intervals: List[Tuple[float, float]] = []
+    lag_observability: Dict[str, Any] = {
+        "samples": 0,
+        "post_batch_samples": 0,
+        "peak_by_partition": {},
+        "sampling_durations_ms": lag_sampling_durations_ms,
+        "sampling_intervals": lag_sampling_intervals,
+    }
+    consumer_thread_errors: List[Exception] = []
+    lag_snapshot_errors: List[Exception] = []
     persisted_by_id: Dict[str, Any] = {}
     ingress_latency_ms: List[float] = []
     enqueue_to_offset_commit_ms: List[float] = []
@@ -160,9 +299,69 @@ def run_benchmark(
 
                     if worker.last_stage_timing is not None:
                         stage_timings.append(worker.last_stage_timing)
+
+                    # Sample broker-level lag from the consumer's owning thread.
+                    t_lag_sample_start = time.perf_counter()
+                    lag_snapshot = query_partition_lag(
+                        consumer=worker._consumer,
+                        topic=topic,
+                        partition_count=partitions,
+                    )
+                    t_lag_sample_end = time.perf_counter()
+                    lag_sampling_durations_ms.append(
+                        (t_lag_sample_end - t_lag_sample_start) * 1000.0
+                    )
+                    lag_sampling_intervals.append((t_lag_sample_start, t_lag_sample_end))
+                    lag_observability["samples"] += 1
+                    lag_observability["post_batch_samples"] += 1
+                    for partition, partition_data in lag_snapshot["by_partition"].items():
+                        partition_key = str(partition)
+                        observed_lag = partition_data["lag"]
+                        previous_peak = lag_observability["peak_by_partition"].get(
+                            partition_key, 0
+                        )
+                        lag_observability["peak_by_partition"][partition_key] = max(
+                            previous_peak,
+                            observed_lag,
+                        )
                 elif producer_done.is_set():
                     time.sleep(0.005)
+        except Exception as exc:
+            consumer_thread_errors.append(exc)
+            logger.exception("Consumer benchmark thread failed")
         finally:
+            # Capture final broker lag before closing the consumer.
+            # This must execute on the consumer's owning thread.
+            try:
+                t_final_snap_start = time.perf_counter()
+                lag_observability["final_snapshot"] = query_partition_lag(
+                    consumer=worker._consumer,
+                    topic=topic,
+                    partition_count=partitions,
+                )
+                t_final_snap_end = time.perf_counter()
+                lag_sampling_durations_ms.append(
+                    (t_final_snap_end - t_final_snap_start) * 1000.0
+                )
+                lag_sampling_intervals.append((t_final_snap_start, t_final_snap_end))
+                lag_observability["samples"] += 1
+                # Include the final observation in the peak calculation.
+                for partition, partition_data in (
+                    lag_observability["final_snapshot"]["by_partition"].items()
+                ):
+                    partition_key = str(partition)
+                    observed_lag = partition_data["lag"]
+                    previous_peak = lag_observability["peak_by_partition"].get(
+                        partition_key, 0
+                    )
+                    lag_observability["peak_by_partition"][partition_key] = max(
+                        previous_peak,
+                        observed_lag,
+                    )
+            except Exception as exc:
+                lag_snapshot_errors.append(exc)
+                logger.exception("Final Kafka lag snapshot failed")
+
             consumer_stage_timings = list(stage_timings)
             consumer_metrics = {
                 "processed": processed,
@@ -246,6 +445,30 @@ def run_benchmark(
 
         stop_consumer.set()
         consumer_thread.join(timeout=10.0)
+        if consumer_thread.is_alive():
+            raise TimeoutError(
+                "Consumer benchmark thread did not stop within 10 seconds"
+            )
+        if consumer_thread_errors:
+            raise RuntimeError(
+                "Consumer benchmark thread failed"
+            ) from consumer_thread_errors[0]
+        if lag_snapshot_errors:
+            raise RuntimeError(
+                "Failed to capture final Kafka partition lag"
+            ) from lag_snapshot_errors[0]
+        final_lag = lag_observability.get("final_snapshot")
+        if final_lag is None:
+            raise RuntimeError(
+                "Benchmark completed without a final Kafka lag snapshot"
+            )
+        total_final_lag = final_lag["total_lag"]
+        if total_final_lag != 0:
+            raise RuntimeError(
+                f"Benchmark finished with residual Kafka lag: "
+                f"{total_final_lag} messages. "
+                f"Per-partition lag: {final_lag['by_partition']}"
+            )
         overall_end = time.perf_counter()
 
         # Query PostgreSQL for the persisted rows in this topic
@@ -275,6 +498,22 @@ def run_benchmark(
                     }
                     ingress_latency_ms.append(max(0.0, lat))
 
+        if consumer_metrics.get("processed", 0) != event_count:
+            raise RuntimeError(
+                f"Expected {event_count} processed events, "
+                f"got {consumer_metrics.get('processed', 0)}"
+            )
+        if publisher.acknowledged_count != event_count:
+            raise RuntimeError(
+                f"Expected {event_count} broker acknowledgements, "
+                f"got {publisher.acknowledged_count}"
+            )
+        if len(persisted_by_id) != event_count:
+            raise RuntimeError(
+                f"Expected {event_count} persisted unique rows, "
+                f"got {len(persisted_by_id)}"
+            )
+
         producer_window = (
             max(interval, (last_publish_perf - first_publish_perf) + interval)
             if first_publish_perf is not None and last_publish_perf is not None
@@ -284,11 +523,28 @@ def run_benchmark(
 
         last_commit = last_commit_perf if last_commit_perf is not None else overall_end
         first_publish = first_publish_perf if first_publish_perf is not None else overall_start
+        consumer_start = consumer_ready_at or overall_start
         total_duration = max(0.000001, last_commit - first_publish)
-        consumer_duration = max(0.000001, last_commit - (consumer_ready_at or overall_start))
+        consumer_duration = max(0.000001, last_commit - consumer_start)
         drain_duration = max(
             0.0,
             last_commit - (producer_done_at if producer_done_at is not None else last_commit),
+        )
+
+        lag_summary = summarize_lag_sampling(lag_sampling_durations_ms)
+        in_window_telemetry_seconds = calculate_total_in_window_overhead(
+            lag_sampling_intervals,
+            window_start=consumer_start,
+            window_end=last_commit,
+        )
+        post_commit_telemetry_seconds = round(
+            sum(
+                calculate_interval_intersection(
+                    s, e, window_start=last_commit, window_end=float("inf")
+                )
+                for s, e in lag_sampling_intervals
+            ),
+            3,
         )
 
         return {
@@ -314,6 +570,27 @@ def run_benchmark(
                 "batch_timeout_ms": batch_timeout_ms,
                 "batches_processed": len(consumer_stage_timings),
                 "drain_seconds": round(drain_duration, 3),
+            },
+            "lag": {
+                "measurement": (
+                    "Broker-level partition lag calculated as "
+                    "max(0, highwater - effective committed offset)"
+                ),
+                "samples": lag_summary["samples"],
+                "post_batch_samples": lag_observability.get("post_batch_samples", 0),
+                "peak_by_partition": (
+                    lag_observability["peak_by_partition"]
+                ),
+                "total_sampling_overhead_seconds": lag_summary["total_sampling_overhead_seconds"],
+                "mean_sample_duration_ms": lag_summary["mean_sample_duration_ms"],
+                "post_commit_sampling_overhead_seconds": post_commit_telemetry_seconds,
+                "final_snapshot": (
+                    lag_observability["final_snapshot"]
+                ),
+                "final_total_lag": (
+                    lag_observability["final_snapshot"]["total_lag"]
+                ),
+                "zero_residual_lag_verified": True,
             },
             "postgres": {
                 "persisted_unique_rows": len(persisted_by_id),
@@ -359,6 +636,10 @@ def run_benchmark(
                 "total_duration_measurement": "first publish start -> last synchronous consumer offset commit",
                 "consumer_window_seconds": round(consumer_duration, 3),
                 "consumer_window_measurement": "consumer worker ready -> last synchronous consumer offset commit",
+                "worker_active_processing_seconds": round(
+                    sum(t.total_processing_ms for t in consumer_stage_timings) / 1000.0, 3
+                ),
+                "in_window_instrumentation_overhead_seconds": in_window_telemetry_seconds,
             },
         }
     finally:
