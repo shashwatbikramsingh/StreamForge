@@ -101,20 +101,23 @@ Events published toward the end of the run sat in partition logs waiting for the
 
 ---
 
-## 6. How to Reproduce
+## 7. Day 6: SQL Statement Batching & Database Performance Benchmark
 
-Run the live benchmark script against healthy Kafka and PostgreSQL containers:
+Following Day 5's transaction batching milestone, Day 6 evaluated SQL statement batching and optimistic conflict handling under an identical 2,000-event / 100 EPS workload (3 Kafka partitions, 1 consumer worker, batch size 50, batch timeout 100 ms).
 
-```powershell
-# Scenario 1 (10 EPS, 500 events)
-.\.venv\Scripts\python.exe .\scripts\benchmark_e2e_pipeline.py --events 500 --rate 10 --partitions 3
+### 7.1 Day 5 vs. Day 6 Empirical Performance Comparison
 
-# Scenario 2 (25 EPS, 1,000 events)
-.\.venv\Scripts\python.exe .\scripts\benchmark_e2e_pipeline.py --events 1000 --rate 25 --partitions 3
+| Metric | Day 5 (Transaction Batching Only) | Day 6 (SQL Statement Batching + Defense) | Delta / Improvement |
+| :--- | :--- | :--- | :--- |
+| **P50 Database Persistence (`db_persist_ms`)** | **149.61 ms** | **100.74 ms** | **−32.7% latency reduction** 🔥 |
+| **Mean Database Persistence (`db_persist_ms`)** | 148.50 ms | **99.58 ms** | **−32.9% faster** |
+| **P95 Database Persistence (`db_persist_ms`)** | 185.20 ms | **143.02 ms** | **−22.8% lower latency** |
+| **P50 End-to-End Latency (`enqueue_to_commit`)** | 310.40 ms | **254.32 ms** | **−18.1% lower latency** |
+| **Consumer Drain Latency (`drain_seconds`)** | 0.203 s | **0.196 s** | **−3.4% faster drain** |
+| **Persisted Ingestion Throughput** | 98.85 EPS | **98.85 EPS** | 100% of offered rate absorbed |
+| **Unique Database Rows Persisted** | 2,000 / 2,000 | **2,000 / 2,000** | 100% integrity |
+| **Synchronous Kafka Offsets Committed** | 2,000 / 2,000 | **2,000 / 2,000** | 100% offset durability |
+| **Quarantined / Dropped / Failed Records** | 0 / 0 / 0 | **0 / 0 / 0** | Zero errors |
 
-# Scenario 3 (50 EPS, 2,000 events)
-.\.venv\Scripts\python.exe .\scripts\benchmark_e2e_pipeline.py --events 2000 --rate 50 --partitions 3
-
-# Scenario 4 (100 EPS, 5,000 events)
-.\.venv\Scripts\python.exe .\scripts\benchmark_e2e_pipeline.py --events 5000 --rate 100 --partitions 3
-```
+### 7.2 Amdahl's Law in the Processing Pipeline
+With database persistence dropping from ~150 ms to ~100 ms per batch, the primary time consumer transitioned from database execution (>55% in Day 5) to an even balance between Kafka polling accumulation (**105 ms / 50%**) and PostgreSQL batch persistence (**100 ms / 47%**). Full details and trade-offs are documented in `DAY_6.md`.

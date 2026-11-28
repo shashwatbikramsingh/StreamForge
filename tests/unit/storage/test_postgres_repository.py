@@ -31,11 +31,15 @@ from streamforge.storage.repository import BatchItem
 # Mock database infrastructure
 # ---------------------------------------------------------------------
 
-def make_connection(fetchone_values=()):
+def make_connection(fetchone_values=(), fetchall_values=()):
     """Create a mocked connection with observable transaction outcomes."""
     conn = MagicMock()
     cursor = MagicMock()
     cursor.fetchone.side_effect = list(fetchone_values)
+    if fetchall_values:
+        cursor.fetchall.side_effect = list(fetchall_values)
+    else:
+        cursor.fetchall.return_value = []
     transaction_events: List[str] = []
 
     cursor.__enter__.return_value = cursor
@@ -403,14 +407,10 @@ def test_persist_events_batch_all_accepted():
         BatchItem(event=e, source_partition=0, source_offset=i)
         for i, e in enumerate(events)
     ]
-    # For each item:
-    # 1. processed_events insert returns row
-    # 2. rides upsert returns row
-    fetchone_vals = []
-    for i in range(3):
-        fetchone_vals.extend([{"id": i + 1}, {"status": "ride.requested", "status_rank": 0}])
+    fetchall_vals = [[{"event_id": f"EVT-BATCH-{i}"} for i in range(3)]]
+    fetchone_vals = [{"status": "ride.requested", "status_rank": 0} for _ in range(3)]
 
-    conn = make_connection(fetchone_values=fetchone_vals)
+    conn = make_connection(fetchone_values=fetchone_vals, fetchall_values=fetchall_vals)
     pool = make_mock_pool(conn)
     repo = PostgresRepository(pool=pool)
 
@@ -421,8 +421,8 @@ def test_persist_events_batch_all_accepted():
     assert res.quarantined_count == 0
     assert len(res.item_results) == 3
     assert all(r.status == "accepted" for r in res.item_results)
-    # Outer transaction + 3 inner savepoints: 1 outer COMMIT
-    assert conn.transaction_events == ["BEGIN", "BEGIN", "COMMIT", "BEGIN", "COMMIT", "BEGIN", "COMMIT", "COMMIT"]
+    # One atomic outer transaction, 0 inner savepoints
+    assert conn.transaction_events == ["BEGIN", "COMMIT"]
 
 
 def test_persist_events_batch_mixed_duplicates():
@@ -435,16 +435,14 @@ def test_persist_events_batch_mixed_duplicates():
         BatchItem(event=events[0], source_partition=0, source_offset=10),
         BatchItem(event=events[1], source_partition=0, source_offset=11),
     ]
-    # Item 0: insert returns row, upsert returns row
-    # Item 1: insert returns None (duplicate), counter increment returns row
+    # Bulk insert returns only Item 0 (Item 1 is duplicate pre-existing in DB)
+    fetchall_vals = [[{"event_id": "EVT-MIX-0"}]]
     fetchone_vals = [
-        {"id": 10},
-        {"status": "ride.requested", "status_rank": 0},
-        None,
-        {"metric_value": 1},
+        {"status": "ride.requested", "status_rank": 0},  # Item 0 projection
+        {"metric_value": 1},  # batch duplicates counter increment
     ]
 
-    conn = make_connection(fetchone_values=fetchone_vals)
+    conn = make_connection(fetchone_values=fetchone_vals, fetchall_values=fetchall_vals)
     pool = make_mock_pool(conn)
     repo = PostgresRepository(pool=pool)
 
@@ -455,10 +453,11 @@ def test_persist_events_batch_mixed_duplicates():
     assert res.quarantined_count == 0
     assert res.item_results[0].status == "accepted"
     assert res.item_results[1].status == "duplicate"
+    assert conn.transaction_events == ["BEGIN", "COMMIT"]
 
 
 def test_persist_events_batch_terminal_conflict_isolated_to_dlq():
-    """Scenario 3: Conflicting item in batch is quarantined to DLQ via savepoint rollback, while valid item succeeds."""
+    """Scenario 3: Conflicting item in batch is quarantined to DLQ via compensating DELETE, while valid item succeeds."""
     evt_valid = _create_sample_ride_requested_event(event_id="EVT-VALID-1", ride_id="RIDE-VALID-1")
     evt_conflict = _create_sample_ride_cancelled_event(event_id="EVT-CONF-1", ride_id="RIDE-CONF-1")
 
@@ -467,24 +466,19 @@ def test_persist_events_batch_terminal_conflict_isolated_to_dlq():
         BatchItem(event=evt_conflict, source_partition=0, source_offset=101),
     ]
 
-    # Item 0 (valid):
-    # - processed_events insert: returns row
-    # - rides upsert: returns row
-    # Item 1 (conflict):
-    # - processed_events insert: returns row
-    # - rides upsert: returns None (terminal conflict WHERE filter rejected)
-    # - rides select: returns existing terminal status
-    # - dead_letter_events insert: returns row with ID
+    # Bulk insert returns both event_ids
+    fetchall_vals = [
+        [{"event_id": "EVT-VALID-1"}, {"event_id": "EVT-CONF-1"}],
+    ]
     fetchone_vals = [
-        {"id": 100},
-        {"status": "ride.requested", "status_rank": 0},
-        {"id": 101},
-        None,
-        {"status": "ride.completed"},
-        {"id": 501},
+        {"status": "ride.requested", "status_rank": 0},  # Item 0 projection
+        None,  # Item 1 projection terminal conflict
+        {"status": "ride.completed"},  # Item 1 check status
+        {"event_id": "EVT-CONF-1"},  # Item 1 verified compensating delete
+        {"id": 501},  # Item 1 DLQ insert
     ]
 
-    conn = make_connection(fetchone_values=fetchone_vals)
+    conn = make_connection(fetchone_values=fetchone_vals, fetchall_values=fetchall_vals)
     pool = make_mock_pool(conn)
     repo = PostgresRepository(pool=pool)
 
@@ -497,9 +491,7 @@ def test_persist_events_batch_terminal_conflict_isolated_to_dlq():
     assert res.item_results[1].status == "quarantined"
     assert res.item_results[1].dlq_id == "DLQ-000501"
     assert "Terminal conflict" in res.item_results[1].error_reason
-    # Outer transaction committed, inner savepoint for conflict rolled back
-    assert "ROLLBACK" in conn.transaction_events
-    assert conn.transaction_events[-1] == "COMMIT"
+    assert conn.transaction_events == ["BEGIN", "COMMIT"]
 
 
 def test_persist_events_batch_database_failure_rolls_back_entire_batch():
@@ -515,7 +507,7 @@ def test_persist_events_batch_database_failure_rolls_back_entire_batch():
     with pytest.raises(OperationalError, match="Connection lost"):
         repo.persist_events_batch(items)
 
-    assert conn.transaction_events == ["BEGIN", "BEGIN", "ROLLBACK", "ROLLBACK"]
+    assert conn.transaction_events == ["BEGIN", "ROLLBACK"]
 
 
 def test_persist_events_batch_empty_items_zero_connection_checkout():
@@ -530,4 +522,113 @@ def test_persist_events_batch_empty_items_zero_connection_checkout():
     assert res.quarantined_count == 0
     assert res.item_results == []
     pool.connection.assert_not_called()
+
+
+def test_persist_events_batch_quarantined_item_retried_in_same_batch():
+    """Scenario 6: If an item is quarantined, a subsequent occurrence of the same event_id retries insertion."""
+    evt_conflict = _create_sample_ride_cancelled_event(event_id="EVT-RETRY-1", ride_id="RIDE-1")
+    evt_retry = _create_sample_ride_requested_event(event_id="EVT-RETRY-1", ride_id="RIDE-2")
+
+    items = [
+        BatchItem(event=evt_conflict, source_partition=0, source_offset=10),
+        BatchItem(event=evt_retry, source_partition=0, source_offset=11),
+    ]
+
+    # Initial bulk insert has 1 unique event_id
+    fetchall_vals = [
+        [{"event_id": "EVT-RETRY-1"}],
+    ]
+    fetchone_vals = [
+        None,  # 1st projection conflicts
+        {"status": "ride.completed"},  # 1st status check
+        {"event_id": "EVT-RETRY-1"},  # 1st verified compensating delete
+        {"id": 701},  # 1st DLQ insert
+        {"event_id": "EVT-RETRY-1"},  # 2nd single insert retry succeeds
+        {"status": "ride.requested", "status_rank": 0},  # 2nd projection succeeds
+    ]
+
+    conn = make_connection(fetchone_values=fetchone_vals, fetchall_values=fetchall_vals)
+    pool = make_mock_pool(conn)
+    repo = PostgresRepository(pool=pool)
+
+    res = repo.persist_events_batch(items)
+
+    assert res.accepted_count == 1
+    assert res.quarantined_count == 1
+    assert res.duplicate_count == 0
+    assert res.item_results[0].status == "quarantined"
+    assert res.item_results[1].status == "accepted"
+    assert conn.transaction_events == ["BEGIN", "COMMIT"]
+
+
+def test_persist_events_batch_repeated_id_in_same_batch_duplicate():
+    """Scenario 7: Repeated event_id where first occurrence is accepted marks second as duplicate."""
+    evt = _create_sample_ride_requested_event(event_id="EVT-DUP-1", ride_id="RIDE-DUP-1")
+    items = [
+        BatchItem(event=evt, source_partition=0, source_offset=1),
+        BatchItem(event=evt, source_partition=0, source_offset=2),
+    ]
+
+    fetchall_vals = [[{"event_id": "EVT-DUP-1"}]]
+    fetchone_vals = [
+        {"status": "ride.requested", "status_rank": 0},  # 1st projection succeeds
+        {"metric_value": 1},  # duplicates_ignored counter
+    ]
+
+    conn = make_connection(fetchone_values=fetchone_vals, fetchall_values=fetchall_vals)
+    pool = make_mock_pool(conn)
+    repo = PostgresRepository(pool=pool)
+
+    res = repo.persist_events_batch(items)
+
+    assert res.accepted_count == 1
+    assert res.duplicate_count == 1
+    assert res.quarantined_count == 0
+    assert res.item_results[0].status == "accepted"
+    assert res.item_results[1].status == "duplicate"
+    assert conn.transaction_events == ["BEGIN", "COMMIT"]
+
+
+def test_persist_events_batch_compensating_delete_failure_triggers_rollback():
+    """Scenario 8: If compensating DELETE fails to return deleted row, entire batch rolls back."""
+    evt_conflict = _create_sample_ride_cancelled_event(event_id="EVT-FAIL-DEL", ride_id="RIDE-FAIL")
+    items = [BatchItem(event=evt_conflict, source_partition=0, source_offset=10)]
+
+    fetchall_vals = [[{"event_id": "EVT-FAIL-DEL"}]]
+    fetchone_vals = [
+        None,  # Projection conflicts
+        {"status": "ride.completed"},  # Status check
+        None,  # Compensating DELETE fails to return row (e.g. row not found or trigger error)
+    ]
+
+    conn = make_connection(fetchone_values=fetchone_vals, fetchall_values=fetchall_vals)
+    pool = make_mock_pool(conn)
+    repo = PostgresRepository(pool=pool)
+
+    with pytest.raises(RuntimeError, match="Failed to remove quarantined event EVT-FAIL-DEL"):
+        repo.persist_events_batch(items)
+
+    assert conn.transaction_events == ["BEGIN", "ROLLBACK"]
+
+
+def test_persist_events_batch_compensating_delete_mismatched_id_triggers_rollback():
+    """Scenario 9: If compensating DELETE returns an unexpected event_id, entire batch rolls back."""
+    evt_conflict = _create_sample_ride_cancelled_event(event_id="EVT-EXPECTED", ride_id="RIDE-FAIL")
+    items = [BatchItem(event=evt_conflict, source_partition=0, source_offset=10)]
+
+    fetchall_vals = [[{"event_id": "EVT-EXPECTED"}]]
+    fetchone_vals = [
+        None,  # Projection conflicts
+        {"status": "ride.completed"},  # Status check
+        {"event_id": "EVT-UNEXPECTED-OTHER"},  # Corrupted or mismatched return value
+    ]
+
+    conn = make_connection(fetchone_values=fetchone_vals, fetchall_values=fetchall_vals)
+    pool = make_mock_pool(conn)
+    repo = PostgresRepository(pool=pool)
+
+    with pytest.raises(RuntimeError, match="Unexpected event deleted: EVT-UNEXPECTED-OTHER"):
+        repo.persist_events_batch(items)
+
+    assert conn.transaction_events == ["BEGIN", "ROLLBACK"]
 

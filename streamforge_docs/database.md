@@ -115,14 +115,23 @@ Validate query plans with representative data and `EXPLAIN (ANALYZE, BUFFERS)` b
 
 ## 5. Transaction and idempotency pattern
 
-For each valid event:
-
+### 5.1 Single-Event Processing
 1. Begin a database transaction.
 2. Insert into `processed_events` using `ON CONFLICT (event_id) DO NOTHING`.
 3. If no row was inserted, increment `pipeline_counters('duplicates_ignored')`, commit, and do not reapply the projection.
 4. If inserted, lock the existing ride projection row with `SELECT ... FOR UPDATE` when present, validate the state transition, and apply the projection update in the same transaction.
 5. Commit the database transaction.
 6. Commit the Kafka offset only after the durable database outcome is known.
+
+### 5.2 Micro-Batch Processing (Day 6 Hybrid Architecture)
+Implemented in `persist_events_batch()`:
+1. **Outer Transaction**: Single transaction per micro-batch (e.g. 50 events) using a pooled connection.
+2. **Bulk Multi-Row Insert**: Single parameterized `INSERT INTO processed_events ... VALUES (...), (...) ON CONFLICT (event_id) DO NOTHING RETURNING event_id` for all distinct event IDs in the batch.
+3. **In-Memory Four-State Tracking**: Partitions batch records into `pending`, `accepted`, `duplicate`, and `quarantined`.
+4. **Sequential Projection Updates**: Updates `rides` projections sequentially in arrival order, preserving monotonic lifecycle ordering without triggering PostgreSQL's duplicate intra-batch update restriction.
+5. **Verified Compensating Delete**: On terminal projection conflict, purges tentative `processed_events` row via `DELETE ... RETURNING event_id` and verifies row deletion before durably writing to `dead_letter_events`. Deletion failure triggers outer transaction rollback.
+6. **Aggregated Counter Increment**: Updates `duplicates_ignored` once per batch with `delta = duplicate_count`.
+7. **Synchronous Multi-Partition Commit**: Advances highest contiguous Kafka offset per partition only after outer transaction commits.
 
 If a transition is invalid, roll back the valid-event transaction, then write the DLQ record in a separate transaction. Commit the source offset only after that DLQ transaction succeeds. A crash after database commit but before offset commit causes redelivery; the unique `event_id` makes that replay idempotent.
 

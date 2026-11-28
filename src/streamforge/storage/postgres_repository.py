@@ -305,10 +305,17 @@ class PostgresRepository(EventRepository):
         Atomically persist a batch of events and update their ride projections.
 
         Uses one pooled database connection and one outer PostgreSQL transaction.
-        Nested transactions (savepoints) isolate terminal projection conflicts per item
-        without aborting the entire batch. Conflicted items are quarantined to
-        dead_letter_events within the outer transaction. Unhandled database errors
-        roll back the entire outer transaction and propagate.
+        High-performance hybrid batching:
+        1. Validates all batch items before issuing database operations.
+        2. Deduplicates event IDs within the batch and bulk-inserts new events into
+           processed_events using a single multi-row INSERT ... ON CONFLICT DO NOTHING RETURNING event_id.
+        3. Tracks in-memory event state ('pending', 'accepted', 'duplicate', 'quarantined')
+           to process projections sequentially in original event arrival order.
+        4. Isolates terminal projection conflicts via compensating DELETE of the tentative
+           event row and durable quarantine into dead_letter_events within the outer transaction.
+        5. Retries repeated event IDs whose previous occurrence was quarantined.
+        6. Atomically updates duplicates_ignored counter once for all duplicate items.
+        7. Propagates unhandled database errors to trigger full outer transaction rollback.
 
         If items is empty, immediately returns an empty result without checking
         out a connection.
@@ -321,7 +328,59 @@ class PostgresRepository(EventRepository):
                 quarantined_count=0,
             )
 
-        insert_event_sql = """
+        # 1. Fail-fast validation of Kafka metadata across all batch items
+        for item in items:
+            if not item.source_topic.strip():
+                raise ValueError("source_topic cannot be empty.")
+            if item.source_partition < 0 or item.source_offset < 0:
+                raise ValueError("Kafka partition and offset must be non-negative.")
+
+        item_results: List[BatchItemResult] = []
+        accepted_count = 0
+        duplicate_count = 0
+        quarantined_count = 0
+
+        # Filter unique items for initial bulk insert into processed_events
+        unique_items_to_insert: List[BatchItem] = []
+        seen_batch_ids: set[str] = set()
+        for item in items:
+            if item.event.event_id not in seen_batch_ids:
+                seen_batch_ids.add(item.event.event_id)
+                unique_items_to_insert.append(item)
+
+        # Construct multi-row parameterized INSERT statement
+        row_template = "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        placeholders = ", ".join([row_template] * len(unique_items_to_insert))
+        bulk_insert_sql = f"""
+            INSERT INTO processed_events (
+                event_id, ride_id, event_type, schema_version,
+                occurred_at, produced_at, ingested_at, producer,
+                payload, source_topic, source_partition, source_offset
+            ) VALUES {placeholders}
+            ON CONFLICT (event_id) DO NOTHING
+            RETURNING event_id;
+        """
+
+        flat_params: List[Any] = []
+        for item in unique_items_to_insert:
+            ingest_time = item.ingested_at or datetime.now(timezone.utc)
+            payload_json = Jsonb(item.event.payload.model_dump(mode="json"))
+            flat_params.extend([
+                item.event.event_id,
+                item.event.ride_id,
+                item.event.event_type.value,
+                item.event.schema_version,
+                item.event.occurred_at,
+                item.event.produced_at,
+                ingest_time,
+                item.event.producer,
+                payload_json,
+                item.source_topic,
+                item.source_partition,
+                item.source_offset,
+            ])
+
+        single_insert_sql = """
             INSERT INTO processed_events (
                 event_id, ride_id, event_type, schema_version,
                 occurred_at, produced_at, ingested_at, producer,
@@ -332,124 +391,168 @@ class PostgresRepository(EventRepository):
                 %s, %s, %s, %s
             )
             ON CONFLICT (event_id) DO NOTHING
-            RETURNING id;
+            RETURNING event_id;
         """
-
-        item_results: List[BatchItemResult] = []
-        accepted_count = 0
-        duplicate_count = 0
-        quarantined_count = 0
 
         with self._connection() as conn:
             with conn.transaction():
-                for item in items:
-                    if not item.source_topic.strip():
-                        raise ValueError("source_topic cannot be empty.")
-                    if item.source_partition < 0 or item.source_offset < 0:
-                        raise ValueError("Kafka partition and offset must be non-negative.")
-
-                    ingest_time = item.ingested_at or datetime.now(timezone.utc)
-                    payload_json = Jsonb(item.event.payload.model_dump(mode="json"))
-
-                    fields = _extract_ride_update_fields(item.event)
-                    upsert_params = {
-                        "ride_id": item.event.ride_id,
-                        "status": item.event.event_type.value,
-                        "status_rank": item.event.lifecycle_rank,
-                        **fields,
+                with conn.cursor() as cur:
+                    # 2. Bulk insert unique events in a single SQL statement
+                    cur.execute(bulk_insert_sql, flat_params)
+                    inserted_rows = cur.fetchall()
+                    inserted_ids = {
+                        row["event_id"] if isinstance(row, dict) else row[0]
+                        for row in (inserted_rows or [])
                     }
 
-                    try:
-                        # Nested transaction context acts as a SAVEPOINT in psycopg 3
-                        with conn.transaction():
-                            with conn.cursor() as cur:
-                                # 1. Idempotent insertion into processed_events
-                                cur.execute(
-                                    insert_event_sql,
-                                    (
-                                        item.event.event_id,
-                                        item.event.ride_id,
-                                        item.event.event_type.value,
-                                        item.event.schema_version,
-                                        item.event.occurred_at,
-                                        item.event.produced_at,
-                                        ingest_time,
-                                        item.event.producer,
-                                        payload_json,
-                                        item.source_topic,
-                                        item.source_partition,
-                                        item.source_offset,
-                                    ),
+                    # Initialize in-memory state tracking: "pending", "accepted", "duplicate", "quarantined"
+                    event_states: Dict[str, str] = {}
+                    for item in unique_items_to_insert:
+                        eid = item.event.event_id
+                        if eid in inserted_ids:
+                            event_states[eid] = "pending"
+                        else:
+                            event_states[eid] = "duplicate"
+
+                    # 3. Process items sequentially in original arrival order
+                    for item in items:
+                        eid = item.event.event_id
+                        state = event_states.get(eid)
+
+                        # Case A: Duplicate event (pre-existing in DB or accepted earlier in this batch)
+                        if state in ("duplicate", "accepted"):
+                            item_results.append(
+                                BatchItemResult(
+                                    event_id=eid,
+                                    status="duplicate",
+                                    source_partition=item.source_partition,
+                                    source_offset=item.source_offset,
                                 )
-                                event_row = cur.fetchone()
+                            )
+                            duplicate_count += 1
+                            continue
 
-                                # Duplicate check: zero rows inserted
-                                if event_row is None:
-                                    self._increment_counter_with_conn(conn, "duplicates_ignored", 1)
-                                    item_results.append(
-                                        BatchItemResult(
-                                            event_id=item.event.event_id,
-                                            status="duplicate",
-                                            source_partition=item.source_partition,
-                                            source_offset=item.source_offset,
-                                        )
-                                    )
-                                    duplicate_count += 1
-                                    continue
-
-                                # 2. Update projection with serialized conflict checking
-                                cur.execute(_UPSERT_RIDE_PROJECTION_SQL, upsert_params)
-                                proj_row = cur.fetchone()
-
-                                # Terminal conflict: WHERE condition on conflict DO UPDATE evaluated to False
-                                if proj_row is None:
-                                    cur.execute(
-                                        "SELECT status FROM rides WHERE ride_id = %s;",
-                                        (item.event.ride_id,),
-                                    )
-                                    existing = cur.fetchone()
-                                    existing_status = existing["status"] if existing else "UNKNOWN"
-                                    conflict_msg = (
-                                        f"Terminal conflict: cannot transition from {existing_status} "
-                                        f"to {item.event.event_type.value}"
-                                    )
-                                    raise _TerminalConflictException(conflict_msg)
-
+                        # Case B: Quarantined earlier in this batch -> retry insertion for subsequent occurrence
+                        if state == "quarantined":
+                            ingest_time = item.ingested_at or datetime.now(timezone.utc)
+                            payload_json = Jsonb(item.event.payload.model_dump(mode="json"))
+                            cur.execute(
+                                single_insert_sql,
+                                (
+                                    item.event.event_id,
+                                    item.event.ride_id,
+                                    item.event.event_type.value,
+                                    item.event.schema_version,
+                                    item.event.occurred_at,
+                                    item.event.produced_at,
+                                    ingest_time,
+                                    item.event.producer,
+                                    payload_json,
+                                    item.source_topic,
+                                    item.source_partition,
+                                    item.source_offset,
+                                ),
+                            )
+                            retry_row = cur.fetchone()
+                            if retry_row is None:
                                 item_results.append(
                                     BatchItemResult(
-                                        event_id=item.event.event_id,
+                                        event_id=eid,
+                                        status="duplicate",
+                                        source_partition=item.source_partition,
+                                        source_offset=item.source_offset,
+                                    )
+                                )
+                                duplicate_count += 1
+                                event_states[eid] = "duplicate"
+                                continue
+                            state = "pending"
+
+                        # Case C: Pending projection update
+                        if state == "pending":
+                            fields = _extract_ride_update_fields(item.event)
+                            upsert_params = {
+                                "ride_id": item.event.ride_id,
+                                "status": item.event.event_type.value,
+                                "status_rank": item.event.lifecycle_rank,
+                                **fields,
+                            }
+                            cur.execute(_UPSERT_RIDE_PROJECTION_SQL, upsert_params)
+                            proj_row = cur.fetchone()
+
+                            if proj_row is None:
+                                # Terminal conflict: fetch current status for diagnostic error message
+                                cur.execute(
+                                    "SELECT status FROM rides WHERE ride_id = %s;",
+                                    (item.event.ride_id,),
+                                )
+                                existing = cur.fetchone()
+                                existing_status = existing["status"] if existing else "UNKNOWN"
+                                conflict_msg = (
+                                    f"Terminal conflict: cannot transition from {existing_status} "
+                                    f"to {item.event.event_type.value}"
+                                )
+
+                                # Compensating DELETE of tentative processed_events row
+                                cur.execute(
+                                    "DELETE FROM processed_events "
+                                    "WHERE event_id = %s RETURNING event_id;",
+                                    (eid,),
+                                )
+                                deleted_row = cur.fetchone()
+                                if deleted_row is None:
+                                    raise RuntimeError(
+                                        f"Failed to remove quarantined event {eid} from processed_events."
+                                    )
+                                deleted_event_id = (
+                                    deleted_row["event_id"]
+                                    if isinstance(deleted_row, dict)
+                                    else deleted_row[0]
+                                )
+                                if deleted_event_id != eid:
+                                    raise RuntimeError(
+                                        f"Unexpected event deleted: {deleted_event_id}"
+                                    )
+
+                                # Persist DLQ record inside outer transaction
+                                dlq_id = self._insert_dead_letter_with_conn(
+                                    conn=conn,
+                                    event_id=eid,
+                                    raw_payload=item.event.payload.model_dump(mode="json"),
+                                    error_reason=conflict_msg,
+                                    source_partition=item.source_partition,
+                                    source_offset=item.source_offset,
+                                    source_topic=item.source_topic,
+                                    failure_category="invalid_state_transition",
+                                    ride_id=item.event.ride_id,
+                                )
+                                item_results.append(
+                                    BatchItemResult(
+                                        event_id=eid,
+                                        status="quarantined",
+                                        source_partition=item.source_partition,
+                                        source_offset=item.source_offset,
+                                        error_reason=conflict_msg,
+                                        dlq_id=dlq_id,
+                                    )
+                                )
+                                quarantined_count += 1
+                                event_states[eid] = "quarantined"
+                            else:
+                                item_results.append(
+                                    BatchItemResult(
+                                        event_id=eid,
                                         status="accepted",
                                         source_partition=item.source_partition,
                                         source_offset=item.source_offset,
                                     )
                                 )
                                 accepted_count += 1
+                                event_states[eid] = "accepted"
 
-                    except _TerminalConflictException as exc:
-                        # Savepoint rolled back tentative insert into processed_events.
-                        # Now persist DLQ entry inside the outer transaction.
-                        dlq_id = self._insert_dead_letter_with_conn(
-                            conn=conn,
-                            event_id=item.event.event_id,
-                            raw_payload=item.event.payload.model_dump(mode="json"),
-                            error_reason=exc.message,
-                            source_partition=item.source_partition,
-                            source_offset=item.source_offset,
-                            source_topic=item.source_topic,
-                            failure_category="invalid_state_transition",
-                            ride_id=item.event.ride_id,
-                        )
-                        item_results.append(
-                            BatchItemResult(
-                                event_id=item.event.event_id,
-                                status="quarantined",
-                                source_partition=item.source_partition,
-                                source_offset=item.source_offset,
-                                error_reason=exc.message,
-                                dlq_id=dlq_id,
-                            )
-                        )
-                        quarantined_count += 1
+                    # 4. Atomic batch counter increment for ignored duplicates
+                    if duplicate_count > 0:
+                        self._increment_counter_with_conn(conn, "duplicates_ignored", duplicate_count)
 
         return BatchPersistenceResult(
             item_results=item_results,
